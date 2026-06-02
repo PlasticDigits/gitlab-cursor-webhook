@@ -1,0 +1,19 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "user": {
+    "username": "plasticdigits"
+  },
+  "project": {
+    "name": "example-project"
+  },
+  "object_attributes": {
+    "action": "approval",
+    "iid": 7,
+    "title": "Add feature X",
+    "description": "Implements feature X",
+    "url": "https://gitlab.example/group/example-project/-/merge_requests/7",
+    "source_project_id": 100,
+    "target_project_id": 100
+  }
+}

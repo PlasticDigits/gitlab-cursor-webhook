@@ -1,0 +1,16 @@
+# Gitleaks — https://github.com/gitleaks/gitleaks
+# Extend built-in rules; merge [allowlist] fields with the default config (arrays append).
+
+title = "gitlab-cursor-webhook"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Template placeholders and example env file — not real secrets"
+paths = [
+  '''^\.env\.example$''',
+]
+regexes = [
+  '''crsr_REPLACE_WITH_YOUR_TOKEN''',
+]
