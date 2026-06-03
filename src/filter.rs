@@ -4,6 +4,12 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+/// Minimal GitLab webhook header used before full MR deserialization.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct WebhookEnvelope {
+    pub object_kind: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct GitLabMrWebhook {
     pub object_kind: String,

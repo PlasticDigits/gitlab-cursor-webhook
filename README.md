@@ -69,7 +69,7 @@ With `GITLAB_WEBHOOK_SECRET` set locally, add:
 1. In your GitLab project: **Settings → Webhooks**.
 2. **URL:** `https://<your-render-service>.onrender.com/webhook`
 3. **Name:** `Cursor MR automation (filtered)`
-4. **Trigger:** Merge request events only.
+4. **Trigger:** Merge request events only. (Issue, note, and other hooks are acknowledged with `200` and skipped, but extra triggers add noise.)
 5. **Secret token:** same value as `GITLAB_WEBHOOK_SECRET` on Render (recommended).
 6. **Do not** add a custom `Authorization` header on the GitLab webhook — this service adds `Bearer` when calling Cursor.
 7. Enable SSL verification.
@@ -111,7 +111,11 @@ The service responds `200` with `{"status":"skipped"}` (and does **not** call Cu
 - `user.username` is not in `ALLOWED_USERS`
 - The same MR `iid` + `last_commit.id` was already forwarded within `DEDUP_TTL_SECS`
 
-Otherwise it forwards to Cursor and returns Cursor's HTTP status and body.
+Otherwise it forwards to Cursor. GitLab always receives `200` so delivery is not disabled when Cursor returns an error; the JSON body reports the outcome:
+
+- `{"status":"forwarded","cursor_status":202}` — Cursor accepted the payload
+- `{"status":"forward_failed","cursor_status":400}` — Cursor returned a client/server error (check automation URL, token, and payload)
+- `{"status":"forward_failed","error":"failed to reach cursor webhook"}` — network or DNS failure reaching Cursor
 
 Duplicate skips log `skipped_reason=duplicate`. A new push on the same MR has a different `last_commit.id` and is forwarded. Entries expire after the TTL so the in-memory cache does not grow without bound.
 

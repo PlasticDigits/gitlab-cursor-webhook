@@ -1,0 +1,14 @@
+{
+  "object_kind": "note",
+  "event_type": "note",
+  "user": {
+    "username": "plasticdigits"
+  },
+  "project": {
+    "name": "example-project"
+  },
+  "object_attributes": {
+    "noteable_type": "MergeRequest",
+    "note": "Looks good"
+  }
+}

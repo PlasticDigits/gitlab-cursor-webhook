@@ -127,7 +127,100 @@ async fn open_webhook_forwards_to_cursor() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "forwarded", "cursor_status": 202 })
+    );
+}
+
+#[tokio::test]
+async fn cursor_client_error_still_returns_ok_to_gitlab() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock cursor");
+    let addr = listener.local_addr().unwrap();
+    let cursor_url = format!("http://{addr}/hook");
+
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route(
+                "/hook",
+                axum::routing::post(|| async { StatusCode::BAD_REQUEST }),
+            ),
+        )
+        .await
+        .expect("mock cursor server");
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let app = routes::router(test_state(&cursor_url));
+    let body = include_str!("fixtures/mr_open.json");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "forward_failed", "cursor_status": 400 })
+    );
+}
+
+#[tokio::test]
+async fn issue_hook_is_skipped_with_ok() {
+    let app = routes::router(test_state("http://127.0.0.1:1/unused"));
+    let body = include_str!("fixtures/issue_hook.json");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+}
+
+#[tokio::test]
+async fn note_hook_is_skipped_with_ok() {
+    let app = routes::router(test_state("http://127.0.0.1:1/unused"));
+    let body = include_str!("fixtures/note_hook.json");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "skipped" })
+    );
 }
 
 #[tokio::test]
@@ -168,7 +261,11 @@ async fn duplicate_open_webhook_is_skipped() {
         )
         .await
         .unwrap();
-    assert_eq!(first.status(), StatusCode::ACCEPTED);
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(first).await,
+        serde_json::json!({ "status": "forwarded", "cursor_status": 202 })
+    );
 
     let second = app
         .oneshot(

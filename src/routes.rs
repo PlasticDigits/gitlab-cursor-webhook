@@ -17,7 +17,7 @@ use tracing::{error, info, warn};
 use crate::config::Config;
 use crate::cursor::forward_to_cursor;
 use crate::dedup::{commit_key, DedupCache};
-use crate::filter::{should_forward, GitLabMrWebhook, SkipReason};
+use crate::filter::{should_forward, GitLabMrWebhook, SkipReason, WebhookEnvelope};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -57,15 +57,29 @@ async fn webhook(
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
+    let envelope: WebhookEnvelope = match serde_json::from_slice(&body) {
+        Ok(e) => e,
+        Err(e) => {
+            warn!(error = %e, "failed to parse gitlab webhook envelope");
+            return ok_response(json!({ "status": "skipped" }));
+        }
+    };
+
+    if envelope.object_kind != "merge_request" {
+        info!(
+            object_kind = %envelope.object_kind,
+            skipped_reason = SkipReason::NotMergeRequest.as_str(),
+            forwarded = false,
+            "webhook skipped"
+        );
+        return ok_response(json!({ "status": "skipped" }));
+    }
+
     let payload: GitLabMrWebhook = match serde_json::from_slice(&body) {
         Ok(p) => p,
         Err(e) => {
-            warn!(error = %e, "failed to parse gitlab webhook payload");
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "invalid json payload" })),
-            )
-                .into_response();
+            warn!(error = %e, "failed to parse merge request webhook payload");
+            return ok_response(json!({ "status": "skipped" }));
         }
     };
 
@@ -82,7 +96,7 @@ async fn webhook(
             forwarded = false,
             "webhook skipped"
         );
-        return (StatusCode::OK, Json(json!({ "status": "skipped" }))).into_response();
+        return ok_response(json!({ "status": "skipped" }));
     }
 
     if let Some(key) = commit_key(&payload) {
@@ -96,23 +110,14 @@ async fn webhook(
                 commit_key = %key,
                 "webhook skipped"
             );
-            return (StatusCode::OK, Json(json!({ "status": "skipped" }))).into_response();
+            return ok_response(json!({ "status": "skipped" }));
         }
     }
 
     match forward_to_cursor(&state.client, &state.config, &payload).await {
-        Ok((status, response_body)) => {
+        Ok((status, _response_body)) => {
             let cursor_status = status.as_u16();
-            if status.is_server_error() {
-                error!(
-                    action = %action,
-                    iid,
-                    username = %username,
-                    forwarded = true,
-                    cursor_status,
-                    "cursor returned server error"
-                );
-            } else {
+            if status.is_success() {
                 info!(
                     action = %action,
                     iid,
@@ -121,8 +126,37 @@ async fn webhook(
                     cursor_status,
                     "webhook forwarded to cursor"
                 );
+                ok_response(json!({
+                    "status": "forwarded",
+                    "cursor_status": cursor_status,
+                }))
+            } else if status.is_server_error() {
+                error!(
+                    action = %action,
+                    iid,
+                    username = %username,
+                    forwarded = true,
+                    cursor_status,
+                    "cursor returned server error"
+                );
+                ok_response(json!({
+                    "status": "forward_failed",
+                    "cursor_status": cursor_status,
+                }))
+            } else {
+                warn!(
+                    action = %action,
+                    iid,
+                    username = %username,
+                    forwarded = true,
+                    cursor_status,
+                    "cursor rejected webhook"
+                );
+                ok_response(json!({
+                    "status": "forward_failed",
+                    "cursor_status": cursor_status,
+                }))
             }
-            (status, response_body).into_response()
         }
         Err(e) => {
             error!(
@@ -133,13 +167,16 @@ async fn webhook(
                 error = %e,
                 "failed to forward webhook to cursor"
             );
-            (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({ "error": "failed to reach cursor webhook" })),
-            )
-                .into_response()
+            ok_response(json!({
+                "status": "forward_failed",
+                "error": "failed to reach cursor webhook",
+            }))
         }
     }
+}
+
+fn ok_response(body: Value) -> Response {
+    (StatusCode::OK, Json(body)).into_response()
 }
 
 #[cfg(test)]
