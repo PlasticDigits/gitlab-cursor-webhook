@@ -59,6 +59,7 @@ pub enum SkipReason {
     ActionFiltered { action: String },
     ForkMr,
     UserNotAllowed { username: String },
+    Duplicate,
 }
 
 impl SkipReason {
@@ -68,6 +69,7 @@ impl SkipReason {
             SkipReason::ActionFiltered { .. } => "action_filtered",
             SkipReason::ForkMr => "fork_mr",
             SkipReason::UserNotAllowed { .. } => "user_not_allowed",
+            SkipReason::Duplicate => "duplicate",
         }
     }
 }

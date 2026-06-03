@@ -23,7 +23,19 @@ fn test_config(cursor_url: &str) -> Arc<Config> {
             .into_iter()
             .map(str::to_string)
             .collect::<HashSet<_>>(),
+        dedup_ttl_secs: 86_400,
     })
+}
+
+fn test_state(cursor_url: &str) -> routes::AppState {
+    let config = test_config(cursor_url);
+    routes::AppState {
+        config: config.clone(),
+        client: Client::new(),
+        dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
+            config.dedup_ttl_secs,
+        )),
+    }
 }
 
 async fn response_json(response: axum::response::Response) -> Value {
@@ -38,10 +50,7 @@ async fn response_json(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 async fn health_returns_ok() {
-    let app = routes::router(routes::AppState {
-        config: test_config("http://127.0.0.1:1/unused"),
-        client: Client::new(),
-    });
+    let app = routes::router(test_state("http://127.0.0.1:1/unused"));
 
     let response = app
         .oneshot(
@@ -59,10 +68,7 @@ async fn health_returns_ok() {
 
 #[tokio::test]
 async fn approval_webhook_is_skipped() {
-    let app = routes::router(routes::AppState {
-        config: test_config("http://127.0.0.1:1/unused"),
-        client: Client::new(),
-    });
+    let app = routes::router(test_state("http://127.0.0.1:1/unused"));
 
     let body = include_str!("fixtures/mr_approval.json");
     let response = app
@@ -106,10 +112,7 @@ async fn open_webhook_forwards_to_cursor() {
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-    let app = routes::router(routes::AppState {
-        config: test_config(&cursor_url),
-        client: Client::new(),
-    });
+    let app = routes::router(test_state(&cursor_url));
 
     let body = include_str!("fixtures/mr_open.json");
     let response = app
@@ -125,4 +128,63 @@ async fn open_webhook_forwards_to_cursor() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+async fn duplicate_open_webhook_is_skipped() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock cursor");
+    let addr = listener.local_addr().unwrap();
+    let cursor_url = format!("http://{addr}/hook");
+
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route(
+                "/hook",
+                axum::routing::post(|| async { (StatusCode::ACCEPTED, "ok") }),
+            ),
+        )
+        .await
+        .expect("mock cursor server");
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let app = routes::router(test_state(&cursor_url));
+    let body = include_str!("fixtures/mr_open.json");
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .header("X-Gitlab-Event-UUID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+    let second = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .header("X-Gitlab-Event-UUID", "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(second).await,
+        serde_json::json!({ "status": "skipped" })
+    );
 }

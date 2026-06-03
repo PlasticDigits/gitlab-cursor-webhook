@@ -13,6 +13,8 @@ pub struct Config {
     pub cursor_token: String,
     pub gitlab_webhook_secret: Option<String>,
     pub allowed_users: HashSet<String>,
+    /// How long to remember forwarded commit keys (bounds in-memory dedup cache).
+    pub dedup_ttl_secs: u64,
 }
 
 #[derive(Debug, Error)]
@@ -58,12 +60,18 @@ impl Config {
             std::process::exit(1);
         }
 
+        let dedup_ttl_secs = env::var("DEDUP_TTL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(86_400);
+
         Ok(Self {
             listen_addr,
             cursor_webhook_url,
             cursor_token,
             gitlab_webhook_secret,
             allowed_users,
+            dedup_ttl_secs,
         })
     }
 }

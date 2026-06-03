@@ -16,12 +16,14 @@ use tracing::{error, info, warn};
 
 use crate::config::Config;
 use crate::cursor::forward_to_cursor;
-use crate::filter::{should_forward, GitLabMrWebhook};
+use crate::dedup::{commit_key, DedupCache};
+use crate::filter::{should_forward, GitLabMrWebhook, SkipReason};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub client: Client,
+    pub dedup: Arc<DedupCache>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -81,6 +83,21 @@ async fn webhook(
             "webhook skipped"
         );
         return (StatusCode::OK, Json(json!({ "status": "skipped" }))).into_response();
+    }
+
+    if let Some(key) = commit_key(&payload) {
+        if state.dedup.is_duplicate(&key) {
+            info!(
+                action = %action,
+                iid,
+                username = %username,
+                skipped_reason = SkipReason::Duplicate.as_str(),
+                forwarded = false,
+                commit_key = %key,
+                "webhook skipped"
+            );
+            return (StatusCode::OK, Json(json!({ "status": "skipped" }))).into_response();
+        }
     }
 
     match forward_to_cursor(&state.client, &state.config, &payload).await {

@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod cursor;
+pub mod dedup;
 pub mod filter;
 pub mod routes;
 

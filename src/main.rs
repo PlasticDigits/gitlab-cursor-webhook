@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gitlab_cursor_webhook::{config::Config, routes};
+use gitlab_cursor_webhook::{config::Config, dedup::DedupCache, routes};
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -32,6 +32,7 @@ async fn main() {
     let state = routes::AppState {
         config: config.clone(),
         client: Client::new(),
+        dedup: Arc::new(DedupCache::new(config.dedup_ttl_secs)),
     };
 
     let app = routes::router(state).layer(TraceLayer::new_for_http());

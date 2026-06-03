@@ -20,6 +20,7 @@ Moves the `action` / `oldrev` filter out of your automation prompt so spurious M
 | `CURSOR_TOKEN` | **Yes** | Cursor API key (`crsr_…` only — do **not** include `Bearer`). |
 | `GITLAB_WEBHOOK_SECRET` | No | GitLab project webhook secret token. When set, requests must include matching `X-Gitlab-Token`. When unset, this check is skipped. |
 | `ALLOWED_USERS` | **Yes** | Comma-separated GitLab usernames (e.g. `plasticdigits,brouie`). The service **refuses to start** if unset or empty. |
+| `DEDUP_TTL_SECS` | No | How long to remember forwarded `iid` + `last_commit.id` pairs (default `86400`). Bounds memory; GitLab duplicate deliveries are usually immediate. |
 | `RUST_LOG` | No | e.g. `gitlab_cursor_webhook=info` |
 
 Copy [`.env.example`](.env.example) to `.env` for local development. Never commit `.env`.
@@ -108,8 +109,11 @@ The service responds `200` with `{"status":"skipped"}` (and does **not** call Cu
 - `object_attributes.action` is not `open`, or `update` without a non-empty `oldrev`
 - Fork MR: `source_project_id != target_project_id` (when both are present)
 - `user.username` is not in `ALLOWED_USERS`
+- The same MR `iid` + `last_commit.id` was already forwarded within `DEDUP_TTL_SECS`
 
 Otherwise it forwards to Cursor and returns Cursor's HTTP status and body.
+
+Duplicate skips log `skipped_reason=duplicate`. A new push on the same MR has a different `last_commit.id` and is forwarded. Entries expire after the TTL so the in-memory cache does not grow without bound.
 
 ## Render deployment
 
