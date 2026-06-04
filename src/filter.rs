@@ -25,7 +25,10 @@ pub struct User {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Project {
+    pub id: u64,
     pub name: String,
+    #[serde(default)]
+    pub path_with_namespace: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -65,6 +68,7 @@ pub enum SkipReason {
     ActionFiltered { action: String },
     ForkMr,
     UserNotAllowed { username: String },
+    ProjectNotConfigured,
     Duplicate,
 }
 
@@ -75,6 +79,7 @@ impl SkipReason {
             SkipReason::ActionFiltered { .. } => "action_filtered",
             SkipReason::ForkMr => "fork_mr",
             SkipReason::UserNotAllowed { .. } => "user_not_allowed",
+            SkipReason::ProjectNotConfigured => "project_not_configured",
             SkipReason::Duplicate => "duplicate",
         }
     }
@@ -132,7 +137,9 @@ mod tests {
                 username: "plasticdigits".to_string(),
             },
             project: Project {
+                id: 1,
                 name: "test-project".to_string(),
+                path_with_namespace: Some("group/test-project".to_string()),
             },
             object_attributes: ObjectAttributes {
                 action: action.to_string(),

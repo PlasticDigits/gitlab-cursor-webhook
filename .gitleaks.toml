@@ -12,5 +12,6 @@ paths = [
   '''^\.env\.example$''',
 ]
 regexes = [
-  '''crsr_REPLACE_WITH_YOUR_TOKEN''',
+  '''crsr_YIELDOMEGA_TOKEN''',
+  '''crsr_CL8Y_TOKEN''',
 ]

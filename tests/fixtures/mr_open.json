@@ -5,7 +5,9 @@
     "username": "plasticdigits"
   },
   "project": {
-    "name": "example-project"
+    "id": 100,
+    "name": "example-project",
+    "path_with_namespace": "group/example-project"
   },
   "object_attributes": {
     "action": "open",

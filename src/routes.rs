@@ -99,6 +99,19 @@ async fn webhook(
         return ok_response(json!({ "status": "skipped" }));
     }
 
+    let Some(cursor) = state.config.cursor_config_for(&payload.project) else {
+        info!(
+            action = %action,
+            iid,
+            username = %username,
+            project = payload.project.path_with_namespace.as_deref().unwrap_or(""),
+            skipped_reason = SkipReason::ProjectNotConfigured.as_str(),
+            forwarded = false,
+            "webhook skipped"
+        );
+        return ok_response(json!({ "status": "skipped" }));
+    };
+
     if let Some(key) = commit_key(&payload) {
         if state.dedup.is_duplicate(&key) {
             info!(
@@ -114,7 +127,14 @@ async fn webhook(
         }
     }
 
-    match forward_to_cursor(&state.client, &state.config, &payload).await {
+    match forward_to_cursor(
+        &state.client,
+        &cursor.webhook_url,
+        &cursor.token,
+        &payload,
+    )
+    .await
+    {
         Ok((status, _response_body)) => {
             let cursor_status = status.as_u16();
             if status.is_success() {

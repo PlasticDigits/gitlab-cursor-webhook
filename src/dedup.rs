@@ -35,7 +35,7 @@ impl DedupCache {
     }
 }
 
-/// `"{iid}:{commit_sha}"` when `last_commit.id` is present.
+/// `"{project_id}:{iid}:{commit_sha}"` when `last_commit.id` is present.
 pub fn commit_key(payload: &GitLabMrWebhook) -> Option<String> {
     let commit = payload
         .object_attributes
@@ -46,7 +46,10 @@ pub fn commit_key(payload: &GitLabMrWebhook) -> Option<String> {
     if commit.is_empty() {
         return None;
     }
-    Some(format!("{}:{}", payload.object_attributes.iid, commit))
+    Some(format!(
+        "{}:{}:{}",
+        payload.project.id, payload.object_attributes.iid, commit
+    ))
 }
 
 #[cfg(test)]
@@ -63,7 +66,9 @@ mod tests {
                 username: "alice".to_string(),
             },
             project: Project {
+                id: 1,
                 name: "p".to_string(),
+                path_with_namespace: None,
             },
             object_attributes: ObjectAttributes {
                 action: "open".to_string(),

@@ -5,7 +5,6 @@ use reqwest::Client;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::config::Config;
 use crate::filter::GitLabMrWebhook;
 
 #[derive(Debug, Serialize)]
@@ -48,17 +47,15 @@ pub enum CursorForwardError {
 
 pub async fn forward_to_cursor(
     client: &Client,
-    config: &Config,
+    webhook_url: &str,
+    cursor_token: &str,
     payload: &GitLabMrWebhook,
 ) -> Result<(StatusCode, Bytes), CursorForwardError> {
     let body = CursorPayload::from_gitlab(payload);
     let response = client
-        .post(&config.cursor_webhook_url)
+        .post(webhook_url)
         .header("Content-Type", "application/json")
-        .header(
-            "Authorization",
-            format!("Bearer {}", config.cursor_token),
-        )
+        .header("Authorization", format!("Bearer {}", cursor_token))
         .json(&body)
         .send()
         .await?;
