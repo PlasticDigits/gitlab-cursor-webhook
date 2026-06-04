@@ -1,6 +1,6 @@
 # gitlab-cursor-webhook
 
-Filter GitLab merge request webhooks and forward only actionable events to [Cursor Automations](https://cursor.com/docs/automations), with user and fork guards.
+Filter GitLab merge request webhooks and forward only actionable events to [Cursor Automations](https://cursor.com/docs/automations), with user allowlist guards.
 
 Moves the `action` / `oldrev` filter out of your automation prompt so spurious MR activity (approvals, title edits, etc.) never reaches Cursor.
 
@@ -115,7 +115,6 @@ The service responds `200` with `{"status":"skipped"}` (and does **not** call Cu
 
 - `object_kind` is not `merge_request`
 - `object_attributes.action` is not `open`, or `update` without a non-empty `oldrev`
-- Fork MR: `source_project_id != target_project_id` (when both are present)
 - `user.username` is not in `ALLOWED_USERS`
 - The GitLab project is not listed in `PROJECT_WEBHOOKS`
 - The same MR `project_id` + `iid` + `last_commit.id` was already forwarded within `DEDUP_TTL_SECS`
@@ -146,8 +145,8 @@ Duplicate skips log `skipped_reason=duplicate`. A new push on the same MR has a 
 ## Security
 
 - The Cursor `Bearer` token protects the Cursor webhook endpoint from arbitrary internet callers. It does **not** authenticate GitLab.
-- The real trust boundary is **GitLab MR policy**: private repository, no fork MRs (filtered), and `ALLOWED_USERS`.
-- For public or fork-friendly projects, always set `GITLAB_WEBHOOK_SECRET`, keep the fork filter enabled, and maintain a strict allowlist.
+- The real trust boundary is **GitLab MR policy** plus `ALLOWED_USERS` (fork MRs are forwarded when they pass the action and user filters).
+- For public or fork-friendly projects, always set `GITLAB_WEBHOOK_SECRET` and maintain a strict allowlist.
 - Do **not** put the Cursor Bearer token in GitLab webhook custom headers.
 
 ## Development

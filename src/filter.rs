@@ -66,7 +66,6 @@ pub struct ObjectAttributes {
 pub enum SkipReason {
     NotMergeRequest,
     ActionFiltered { action: String },
-    ForkMr,
     UserNotAllowed { username: String },
     ProjectNotConfigured,
     Duplicate,
@@ -77,7 +76,6 @@ impl SkipReason {
         match self {
             SkipReason::NotMergeRequest => "not_merge_request",
             SkipReason::ActionFiltered { .. } => "action_filtered",
-            SkipReason::ForkMr => "fork_mr",
             SkipReason::UserNotAllowed { .. } => "user_not_allowed",
             SkipReason::ProjectNotConfigured => "project_not_configured",
             SkipReason::Duplicate => "duplicate",
@@ -108,13 +106,6 @@ pub fn should_forward(
         return Err(SkipReason::ActionFiltered {
             action: payload.object_attributes.action.clone(),
         });
-    }
-
-    let attrs = &payload.object_attributes;
-    if let (Some(source), Some(target)) = (attrs.source_project_id, attrs.target_project_id) {
-        if source != target {
-            return Err(SkipReason::ForkMr);
-        }
     }
 
     if !allowed_users.contains(&payload.user.username) {
@@ -203,12 +194,11 @@ mod tests {
     }
 
     #[test]
-    fn fork_mr_skips() {
+    fn fork_mr_forwards() {
         let mut payload = base_payload("open");
         payload.object_attributes.source_project_id = Some(2);
         payload.object_attributes.target_project_id = Some(1);
-        let err = should_forward(&payload, &allowlist()).unwrap_err();
-        assert_eq!(err, SkipReason::ForkMr);
+        assert!(should_forward(&payload, &allowlist()).is_ok());
     }
 
     #[test]
