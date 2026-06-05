@@ -16,17 +16,20 @@ use tracing::{error, info, warn};
 
 use crate::config::{Config, WebhookAgent};
 use crate::cursor::{forward_issue_to_cursor, forward_to_cursor};
-use crate::dedup::{commit_key, DedupCache};
+use crate::config::ProjectCursorConfig;
+use crate::dedup::{commit_key, issue_key, DedupCache};
 use crate::filter::{
     should_forward, should_forward_issue, GitLabIssueWebhook, GitLabMrWebhook, IssueAgent,
     SkipReason, WebhookEnvelope,
 };
+use crate::filter::Project;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub client: Client,
     pub dedup: Arc<DedupCache>,
+    pub issue_dedup: Arc<DedupCache>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -182,106 +185,73 @@ async fn handle_issue(state: &AppState, body: &Bytes) -> Response {
         }
     };
 
-    let mut any_forwarded = false;
-    let mut any_failed = false;
-    let mut last_cursor_status = None;
+    let Some((agent, cursor)) = resolve_issue_agent(&agents, &state.config, &payload.project)
+    else {
+        info!(
+            action = %action,
+            iid,
+            username = %username,
+            project = payload.project.path_with_namespace.as_deref().unwrap_or(""),
+            skipped_reason = SkipReason::ProjectNotConfigured.as_str(),
+            forwarded = false,
+            "webhook skipped"
+        );
+        return ok_response(json!({ "status": "skipped" }));
+    };
 
-    for agent in agents {
-        let webhook_agent = match agent {
-            IssueAgent::Verify => WebhookAgent::Verify,
-            IssueAgent::Implement => WebhookAgent::Implement,
-        };
+    let dedup_key = issue_key(&payload.project, iid);
+    if state.issue_dedup.is_duplicate(&dedup_key) {
+        info!(
+            action = %action,
+            iid,
+            username = %username,
+            agent = agent.as_str(),
+            skipped_reason = SkipReason::Duplicate.as_str(),
+            forwarded = false,
+            issue_key = %dedup_key,
+            "webhook skipped"
+        );
+        return ok_response(json!({ "status": "skipped" }));
+    }
 
-        let Some(cursor) = state.config.cursor_config_for(&payload.project, webhook_agent) else {
-            info!(
-                action = %action,
-                iid,
-                username = %username,
-                agent = agent.as_str(),
-                project = payload.project.path_with_namespace.as_deref().unwrap_or(""),
-                skipped_reason = SkipReason::ProjectNotConfigured.as_str(),
-                forwarded = false,
-                "issue agent skipped"
-            );
-            continue;
-        };
-
-        match forward_issue_to_cursor(
+    forward_cursor_result(
+        forward_issue_to_cursor(
             &state.client,
             &cursor.webhook_url,
             &cursor.token,
             &payload,
             agent,
         )
-        .await
-        {
-            Ok((status, _)) => {
-                let cursor_status = status.as_u16();
-                last_cursor_status = Some(cursor_status);
-                if status.is_success() {
-                    any_forwarded = true;
-                    info!(
-                        action = %action,
-                        iid,
-                        username = %username,
-                        agent = agent.as_str(),
-                        forwarded = true,
-                        cursor_status,
-                        "issue webhook forwarded to cursor"
-                    );
-                } else {
-                    any_failed = true;
-                    if status.is_server_error() {
-                        error!(
-                            action = %action,
-                            iid,
-                            username = %username,
-                            agent = agent.as_str(),
-                            forwarded = true,
-                            cursor_status,
-                            "cursor returned server error"
-                        );
-                    } else {
-                        warn!(
-                            action = %action,
-                            iid,
-                            username = %username,
-                            agent = agent.as_str(),
-                            forwarded = true,
-                            cursor_status,
-                            "cursor rejected issue webhook"
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                any_failed = true;
-                error!(
-                    action = %action,
-                    iid,
-                    username = %username,
-                    agent = agent.as_str(),
-                    forwarded = true,
-                    error = %e,
-                    "failed to forward issue webhook to cursor"
-                );
-            }
+        .await,
+        &action,
+        iid,
+        &username,
+        Some(agent.as_str()),
+    )
+}
+
+/// Pick a single agent when both labels fire; prefer implement, then verify, if configured.
+fn resolve_issue_agent<'a>(
+    agents: &[IssueAgent],
+    config: &'a Config,
+    project: &Project,
+) -> Option<(IssueAgent, &'a ProjectCursorConfig)> {
+    for agent in [
+        IssueAgent::Implement,
+        IssueAgent::Verify,
+    ] {
+        if !agents.contains(&agent) {
+            continue;
+        }
+        let webhook_agent = match agent {
+            IssueAgent::Verify => WebhookAgent::Verify,
+            IssueAgent::Implement => WebhookAgent::Implement,
+        };
+        if let Some(cursor) = config.cursor_config_for(project, webhook_agent) {
+            return Some((agent, cursor));
         }
     }
-
-    if any_forwarded {
-        ok_response(json!({
-            "status": "forwarded",
-            "cursor_status": last_cursor_status,
-        }))
-    } else if any_failed {
-        ok_response(json!({
-            "status": "forward_failed",
-            "cursor_status": last_cursor_status,
-        }))
-    } else {
-        ok_response(json!({ "status": "skipped" }))
-    }
+    None
 }
 
 fn forward_cursor_result(

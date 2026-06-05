@@ -33,6 +33,7 @@ async fn main() {
         config: config.clone(),
         client: Client::new(),
         dedup: Arc::new(DedupCache::new(config.dedup_ttl_secs)),
+        issue_dedup: Arc::new(DedupCache::new(config.issue_dedup_ttl_secs)),
     };
 
     let app = routes::router(state).layer(TraceLayer::new_for_http());

@@ -8,6 +8,6 @@ pub mod routes;
 
 pub use config::{Config, WebhookAgent};
 pub use filter::{
-    should_forward, should_forward_issue, GitLabIssueWebhook, GitLabMrWebhook, IssueAgent,
-    SkipReason,
+    select_issue_agent, should_forward, should_forward_issue, GitLabIssueWebhook, GitLabMrWebhook,
+    IssueAgent, SkipReason,
 };

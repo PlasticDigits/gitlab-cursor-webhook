@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::filter::GitLabMrWebhook;
+use crate::filter::{GitLabMrWebhook, Project};
 
-/// Tracks MR commits already forwarded so duplicate GitLab deliveries are skipped.
+/// Tracks forwarded keys so duplicate GitLab deliveries are skipped.
 #[derive(Debug)]
 pub struct DedupCache {
     ttl: Duration,
@@ -33,6 +33,11 @@ impl DedupCache {
         seen.insert(key.to_string(), now);
         false
     }
+}
+
+/// Per-issue key shared by verify and implement so only one agent runs per window.
+pub fn issue_key(project: &Project, iid: u64) -> String {
+    format!("{}:{}", project.id, iid)
 }
 
 /// `"{project_id}:{iid}:{commit_sha}"` when `last_commit.id` is present.
@@ -124,5 +129,28 @@ mod tests {
         assert!(cache.is_duplicate(&key));
         thread::sleep(StdDuration::from_millis(1100));
         assert!(!cache.is_duplicate(&key));
+    }
+
+    #[test]
+    fn issue_key_is_per_project_and_iid() {
+        let project = Project {
+            id: 42,
+            name: "p".to_string(),
+            path_with_namespace: None,
+        };
+        assert_eq!(issue_key(&project, 7), "42:7");
+    }
+
+    #[test]
+    fn issue_dedup_is_shared_across_agents() {
+        let cache = DedupCache::new(900);
+        let project = Project {
+            id: 1,
+            name: "p".to_string(),
+            path_with_namespace: None,
+        };
+        let key = issue_key(&project, 12);
+        assert!(!cache.is_duplicate(&key));
+        assert!(cache.is_duplicate(&key));
     }
 }

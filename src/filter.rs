@@ -252,6 +252,18 @@ pub fn should_forward_issue(
     Ok(agents)
 }
 
+/// When both agents would fire on the same issue event, pick one so they never run together.
+/// Implement takes priority over verify (typical implement-then-verify workflow).
+pub fn select_issue_agent(agents: &[IssueAgent]) -> Option<IssueAgent> {
+    if agents.contains(&IssueAgent::Implement) {
+        Some(IssueAgent::Implement)
+    } else if agents.contains(&IssueAgent::Verify) {
+        Some(IssueAgent::Verify)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_open_with_both_labels_forwards_both() {
+    fn issue_open_with_both_labels_selects_implement() {
         let mut payload = base_issue("open");
         payload.labels = vec![
             Label {
@@ -421,10 +433,9 @@ mod tests {
                 title: LABEL_AGENT_IMPLEMENT.to_string(),
             },
         ];
-        assert_eq!(
-            should_forward_issue(&payload, &allowlist()).unwrap(),
-            vec![IssueAgent::Verify, IssueAgent::Implement]
-        );
+        let agents = should_forward_issue(&payload, &allowlist()).unwrap();
+        assert_eq!(agents.len(), 2);
+        assert_eq!(select_issue_agent(&agents), Some(IssueAgent::Implement));
     }
 
     #[test]

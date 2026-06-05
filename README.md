@@ -24,7 +24,8 @@ Moves filtering out of your automation prompts so spurious activity (MR approval
 | `PROJECT_WEBHOOKS_IMPLEMENT` | No | Same format. Routes issues with label `agent:implement` to the implement automation. |
 | `GITLAB_WEBHOOK_SECRET` | No | GitLab project webhook secret token. When set, requests must include matching `X-Gitlab-Token`. When unset, this check is skipped. |
 | `ALLOWED_USERS` | **Yes** | Comma-separated GitLab usernames (e.g. `plasticdigits,brouie`). The service **refuses to start** if unset or empty. |
-| `DEDUP_TTL_SECS` | No | How long to remember forwarded MR `project_id` + `iid` + `last_commit.id` triples (default `86400`). Bounds memory; GitLab duplicate deliveries are usually immediate. Issue webhooks are not deduplicated. |
+| `DEDUP_TTL_SECS` | No | How long to remember forwarded MR `project_id` + `iid` + `last_commit.id` triples (default `86400`). Bounds memory; GitLab duplicate deliveries are usually immediate. |
+| `ISSUE_DEDUP_TTL_SECS` | No | How long to remember forwarded issue `project_id` + `iid` keys (default `900` = 15 minutes). Verify and implement share one key per issue so they cannot run together within the window. |
 | `RUST_LOG` | No | e.g. `gitlab_cursor_webhook=info` |
 
 Copy [`.env.example`](.env.example) to `.env` for local development. Never commit `.env`.
@@ -169,7 +170,9 @@ Skipped (no Cursor call) when:
 - Only non-label fields changed (title, description, milestone, etc.)
 - `action` is `close`, `reopen`, or other non-open/update actions
 
-When both `agent:verify` and `agent:implement` trigger in the same event, the service forwards to **both** automations.
+When both `agent:verify` and `agent:implement` would trigger in the same event, only **one** automation runs: **implement** if configured, otherwise **verify**.
+
+Issue dedup uses key `project_id:iid` shared across verify and implement. A second webhook for the same issue within `ISSUE_DEDUP_TTL_SECS` (default 15 minutes) is skipped — including the opposite agent (e.g. verify blocked after a recent implement on the same issue).
 
 #### GitLab `changes.labels` quirk
 

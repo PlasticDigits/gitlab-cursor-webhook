@@ -36,8 +36,10 @@ pub struct Config {
     pub project_webhooks_verify: HashMap<String, ProjectCursorConfig>,
     /// Issue implement (`agent:implement`): same key format as security.
     pub project_webhooks_implement: HashMap<String, ProjectCursorConfig>,
-    /// How long to remember forwarded commit keys (bounds in-memory dedup cache).
+    /// How long to remember forwarded MR commit keys (bounds in-memory dedup cache).
     pub dedup_ttl_secs: u64,
+    /// How long to remember forwarded issue keys; verify and implement share one key per issue.
+    pub issue_dedup_ttl_secs: u64,
 }
 
 #[derive(Debug, Error)]
@@ -157,6 +159,11 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(86_400);
 
+        let issue_dedup_ttl_secs = env::var("ISSUE_DEDUP_TTL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(900);
+
         let project_webhooks_security_raw = env::var("PROJECT_WEBHOOKS_SECURITY")
             .map_err(|_| ConfigError::MissingVar("PROJECT_WEBHOOKS_SECURITY"))?;
         let project_webhooks_security =
@@ -177,6 +184,7 @@ impl Config {
             project_webhooks_verify,
             project_webhooks_implement,
             dedup_ttl_secs,
+            issue_dedup_ttl_secs,
         })
     }
 }
@@ -376,6 +384,7 @@ mod tests {
             project_webhooks_verify: HashMap::new(),
             project_webhooks_implement: HashMap::new(),
             dedup_ttl_secs: 86_400,
+            issue_dedup_ttl_secs: 900,
         };
 
         let by_path = Project {

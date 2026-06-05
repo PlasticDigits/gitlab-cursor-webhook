@@ -32,6 +32,7 @@ fn test_config(maps: TestWebhookMaps) -> Arc<Config> {
         project_webhooks_verify: maps.verify,
         project_webhooks_implement: maps.implement,
         dedup_ttl_secs: 86_400,
+        issue_dedup_ttl_secs: 900,
     })
 }
 
@@ -54,6 +55,9 @@ fn test_state(cursor_url: &str) -> routes::AppState {
         client: Client::new(),
         dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
             config.dedup_ttl_secs,
+        )),
+        issue_dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
+            config.issue_dedup_ttl_secs,
         )),
     }
 }
@@ -86,6 +90,9 @@ fn issue_test_state(verify_url: &str, implement_url: &str) -> routes::AppState {
         client: Client::new(),
         dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
             config.dedup_ttl_secs,
+        )),
+        issue_dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
+            config.issue_dedup_ttl_secs,
         )),
     }
 }
@@ -294,6 +301,100 @@ async fn issue_open_with_verify_label_forwards_to_verify_webhook() {
 }
 
 #[tokio::test]
+async fn duplicate_issue_webhook_is_skipped() {
+    let (verify_url, verify_hits) = spawn_mock_cursor("/verify").await;
+    let (implement_url, implement_hits) = spawn_mock_cursor("/implement").await;
+    let app = routes::router(issue_test_state(&verify_url, &implement_url));
+
+    let body = include_str!("fixtures/issue_open_with_verify_label.json");
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(first).await,
+        serde_json::json!({ "status": "forwarded", "cursor_status": 202 })
+    );
+
+    let second = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(second).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+    assert_eq!(verify_hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(implement_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn verify_blocked_after_recent_implement_on_same_issue() {
+    let (verify_url, verify_hits) = spawn_mock_cursor("/verify").await;
+    let (implement_url, implement_hits) = spawn_mock_cursor("/implement").await;
+    let app = routes::router(issue_test_state(&verify_url, &implement_url));
+
+    let implement_body = include_str!("fixtures/issue_update_label_added.json");
+    let implement_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(implement_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(implement_response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(implement_response).await,
+        serde_json::json!({ "status": "forwarded", "cursor_status": 202 })
+    );
+
+    let mut verify_body: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/issue_open_with_verify_label.json")).unwrap();
+    verify_body["object_attributes"]["iid"] = serde_json::json!(5);
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(verify_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(verify_response).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+    assert_eq!(implement_hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(verify_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn issue_update_with_label_added_forwards_to_implement_webhook() {
     let (verify_url, verify_hits) = spawn_mock_cursor("/verify").await;
     let (implement_url, implement_hits) = spawn_mock_cursor("/implement").await;
@@ -421,12 +522,16 @@ async fn mapped_project_uses_project_webhook_url() {
         project_webhooks_verify: HashMap::new(),
         project_webhooks_implement: HashMap::new(),
         dedup_ttl_secs: 86_400,
+        issue_dedup_ttl_secs: 900,
     });
     let state = routes::AppState {
         config: config.clone(),
         client: Client::new(),
         dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
             config.dedup_ttl_secs,
+        )),
+        issue_dedup: Arc::new(gitlab_cursor_webhook::dedup::DedupCache::new(
+            config.issue_dedup_ttl_secs,
         )),
     };
     let app = routes::router(state);
