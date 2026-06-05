@@ -14,13 +14,28 @@ pub struct ProjectCursorConfig {
     pub token: String,
 }
 
+/// Which Cursor automation receives a forwarded webhook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebhookAgent {
+    /// MR security review automation (`PROJECT_WEBHOOKS_SECURITY`).
+    Security,
+    /// Issue verify automation (`PROJECT_WEBHOOKS_VERIFY`, label `agent:verify`).
+    Verify,
+    /// Issue implement automation (`PROJECT_WEBHOOKS_IMPLEMENT`, label `agent:implement`).
+    Implement,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub listen_addr: SocketAddr,
     pub gitlab_webhook_secret: Option<String>,
     pub allowed_users: HashSet<String>,
-    /// Cursor webhook URL + token keyed by GitLab `path_with_namespace` or numeric `id`.
-    pub project_webhooks: HashMap<String, ProjectCursorConfig>,
+    /// MR security review: Cursor webhook URL + token keyed by `path_with_namespace` or numeric `id`.
+    pub project_webhooks_security: HashMap<String, ProjectCursorConfig>,
+    /// Issue verify (`agent:verify`): same key format as security.
+    pub project_webhooks_verify: HashMap<String, ProjectCursorConfig>,
+    /// Issue implement (`agent:implement`): same key format as security.
+    pub project_webhooks_implement: HashMap<String, ProjectCursorConfig>,
     /// How long to remember forwarded commit keys (bounds in-memory dedup cache).
     pub dedup_ttl_secs: u64,
 }
@@ -31,7 +46,7 @@ pub enum ConfigError {
     MissingVar(&'static str),
     #[error("invalid PORT value: {0}")]
     InvalidPort(String),
-    #[error("invalid PROJECT_WEBHOOKS entry (expected path-or-id=url|crsr_token): {0}")]
+    #[error("invalid project webhooks entry (expected path-or-id=url|crsr_token): {0}")]
     InvalidProjectWebhooks(String),
 }
 
@@ -76,16 +91,34 @@ fn parse_project_webhooks(raw: &str) -> Result<HashMap<String, ProjectCursorConf
 }
 
 impl Config {
-    /// Resolve the Cursor webhook config for a GitLab project.
+    /// Resolve the Cursor webhook config for a GitLab project and agent.
     ///
-    /// Checks `PROJECT_WEBHOOKS` by `path_with_namespace`, then numeric `id`.
-    pub fn cursor_config_for(&self, project: &Project) -> Option<&ProjectCursorConfig> {
+    /// Checks the agent's map by `path_with_namespace`, then numeric `id`.
+    pub fn cursor_config_for(
+        &self,
+        project: &Project,
+        agent: WebhookAgent,
+    ) -> Option<&ProjectCursorConfig> {
+        let map = match agent {
+            WebhookAgent::Security => &self.project_webhooks_security,
+            WebhookAgent::Verify => &self.project_webhooks_verify,
+            WebhookAgent::Implement => &self.project_webhooks_implement,
+        };
         if let Some(path) = project.path_with_namespace.as_deref() {
-            if let Some(config) = self.project_webhooks.get(path) {
+            if let Some(config) = map.get(path) {
                 return Some(config);
             }
         }
-        self.project_webhooks.get(&project.id.to_string())
+        map.get(&project.id.to_string())
+    }
+}
+
+fn parse_optional_project_webhooks(
+    var: &'static str,
+) -> Result<HashMap<String, ProjectCursorConfig>, ConfigError> {
+    match env::var(var) {
+        Ok(raw) => parse_project_webhooks(raw.trim()),
+        Err(_) => Ok(HashMap::new()),
     }
 }
 
@@ -124,18 +157,25 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(86_400);
 
-        let project_webhooks_raw = env::var("PROJECT_WEBHOOKS")
-            .map_err(|_| ConfigError::MissingVar("PROJECT_WEBHOOKS"))?;
-        let project_webhooks = parse_project_webhooks(project_webhooks_raw.trim())?;
-        if project_webhooks.is_empty() {
-            return Err(ConfigError::MissingVar("PROJECT_WEBHOOKS"));
+        let project_webhooks_security_raw = env::var("PROJECT_WEBHOOKS_SECURITY")
+            .map_err(|_| ConfigError::MissingVar("PROJECT_WEBHOOKS_SECURITY"))?;
+        let project_webhooks_security =
+            parse_project_webhooks(project_webhooks_security_raw.trim())?;
+        if project_webhooks_security.is_empty() {
+            return Err(ConfigError::MissingVar("PROJECT_WEBHOOKS_SECURITY"));
         }
+
+        let project_webhooks_verify = parse_optional_project_webhooks("PROJECT_WEBHOOKS_VERIFY")?;
+        let project_webhooks_implement =
+            parse_optional_project_webhooks("PROJECT_WEBHOOKS_IMPLEMENT")?;
 
         Ok(Self {
             listen_addr,
             gitlab_webhook_secret,
             allowed_users,
-            project_webhooks,
+            project_webhooks_security,
+            project_webhooks_verify,
+            project_webhooks_implement,
             dedup_ttl_secs,
         })
     }
@@ -180,7 +220,7 @@ mod tests {
             &[
                 ("PORT", Some("9090")),
                 (
-                    "PROJECT_WEBHOOKS",
+                    "PROJECT_WEBHOOKS_SECURITY",
                     Some(
                         "plasticdigits/yieldomega=https://cursor.example/yieldomega|crsr_yieldomega",
                     ),
@@ -192,12 +232,14 @@ mod tests {
                 let cfg = Config::from_env().expect("config should load");
                 assert_eq!(cfg.listen_addr.port(), 9090);
                 assert_eq!(
-                    cfg.project_webhooks.get("plasticdigits/yieldomega"),
+                    cfg.project_webhooks_security.get("plasticdigits/yieldomega"),
                     Some(&ProjectCursorConfig {
                         webhook_url: "https://cursor.example/yieldomega".to_string(),
                         token: "crsr_yieldomega".to_string(),
                     })
                 );
+                assert!(cfg.project_webhooks_verify.is_empty());
+                assert!(cfg.project_webhooks_implement.is_empty());
                 assert_eq!(cfg.gitlab_webhook_secret.as_deref(), Some("secret"));
                 assert!(cfg.allowed_users.contains("alice"));
                 assert!(cfg.allowed_users.contains("bob"));
@@ -212,7 +254,7 @@ mod tests {
             &[
                 ("ALLOWED_USERS", Some("alice")),
                 (
-                    "PROJECT_WEBHOOKS",
+                    "PROJECT_WEBHOOKS_SECURITY",
                     Some(
                         "plasticdigits/yieldomega=https://cursor.example/yieldomega|crsr_a,plasticdigits/cl8y-dex-terraclassic=https://cursor.example/cl8y|crsr_b,123=https://cursor.example/by-id|crsr_c",
                     ),
@@ -221,24 +263,63 @@ mod tests {
             || {
                 let cfg = Config::from_env().expect("config should load");
                 assert_eq!(
-                    cfg.project_webhooks.get("plasticdigits/yieldomega"),
+                    cfg.project_webhooks_security.get("plasticdigits/yieldomega"),
                     Some(&ProjectCursorConfig {
                         webhook_url: "https://cursor.example/yieldomega".to_string(),
                         token: "crsr_a".to_string(),
                     })
                 );
                 assert_eq!(
-                    cfg.project_webhooks.get("plasticdigits/cl8y-dex-terraclassic"),
+                    cfg.project_webhooks_security
+                        .get("plasticdigits/cl8y-dex-terraclassic"),
                     Some(&ProjectCursorConfig {
                         webhook_url: "https://cursor.example/cl8y".to_string(),
                         token: "crsr_b".to_string(),
                     })
                 );
                 assert_eq!(
-                    cfg.project_webhooks.get("123"),
+                    cfg.project_webhooks_security.get("123"),
                     Some(&ProjectCursorConfig {
                         webhook_url: "https://cursor.example/by-id".to_string(),
                         token: "crsr_c".to_string(),
+                    })
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn parses_verify_and_implement_webhooks() {
+        with_env(
+            &[
+                ("ALLOWED_USERS", Some("alice")),
+                (
+                    "PROJECT_WEBHOOKS_SECURITY",
+                    Some("plasticdigits/yieldomega=https://cursor.example/security|crsr_sec"),
+                ),
+                (
+                    "PROJECT_WEBHOOKS_VERIFY",
+                    Some("plasticdigits/yieldomega=https://cursor.example/verify|crsr_verify"),
+                ),
+                (
+                    "PROJECT_WEBHOOKS_IMPLEMENT",
+                    Some("plasticdigits/yieldomega=https://cursor.example/implement|crsr_impl"),
+                ),
+            ],
+            || {
+                let cfg = Config::from_env().expect("config should load");
+                assert_eq!(
+                    cfg.project_webhooks_verify.get("plasticdigits/yieldomega"),
+                    Some(&ProjectCursorConfig {
+                        webhook_url: "https://cursor.example/verify".to_string(),
+                        token: "crsr_verify".to_string(),
+                    })
+                );
+                assert_eq!(
+                    cfg.project_webhooks_implement.get("plasticdigits/yieldomega"),
+                    Some(&ProjectCursorConfig {
+                        webhook_url: "https://cursor.example/implement".to_string(),
+                        token: "crsr_impl".to_string(),
                     })
                 );
             },
@@ -251,14 +332,17 @@ mod tests {
             &[
                 ("ALLOWED_USERS", Some("alice")),
                 (
-                    "PROJECT_WEBHOOKS",
+                    "PROJECT_WEBHOOKS_SECURITY",
                     Some("plasticdigits/yieldomega=https://cursor.example/yieldomega|Bearer crsr_x"),
                 ),
             ],
             || {
                 let cfg = Config::from_env().expect("config should load");
                 assert_eq!(
-                    cfg.project_webhooks.get("plasticdigits/yieldomega").unwrap().token,
+                    cfg.project_webhooks_security
+                        .get("plasticdigits/yieldomega")
+                        .unwrap()
+                        .token,
                     "crsr_x"
                 );
             },
@@ -271,7 +355,7 @@ mod tests {
             listen_addr: "127.0.0.1:8080".parse().unwrap(),
             gitlab_webhook_secret: None,
             allowed_users: HashSet::new(),
-            project_webhooks: [
+            project_webhooks_security: [
                 (
                     "plasticdigits/yieldomega".to_string(),
                     ProjectCursorConfig {
@@ -289,6 +373,8 @@ mod tests {
             ]
             .into_iter()
             .collect(),
+            project_webhooks_verify: HashMap::new(),
+            project_webhooks_implement: HashMap::new(),
             dedup_ttl_secs: 86_400,
         };
 
@@ -298,7 +384,7 @@ mod tests {
             path_with_namespace: Some("plasticdigits/yieldomega".to_string()),
         };
         assert_eq!(
-            cfg.cursor_config_for(&by_path),
+            cfg.cursor_config_for(&by_path, WebhookAgent::Security),
             Some(&ProjectCursorConfig {
                 webhook_url: "https://cursor.example/yieldomega".to_string(),
                 token: "crsr_a".to_string(),
@@ -311,7 +397,8 @@ mod tests {
             path_with_namespace: Some("plasticdigits/other".to_string()),
         };
         assert_eq!(
-            cfg.cursor_config_for(&by_id).map(|c| c.token.as_str()),
+            cfg.cursor_config_for(&by_id, WebhookAgent::Security)
+                .map(|c| c.token.as_str()),
             Some("crsr_b")
         );
 
@@ -320,19 +407,25 @@ mod tests {
             name: "unknown".to_string(),
             path_with_namespace: Some("plasticdigits/unknown".to_string()),
         };
-        assert_eq!(cfg.cursor_config_for(&unconfigured), None);
+        assert_eq!(
+            cfg.cursor_config_for(&unconfigured, WebhookAgent::Security),
+            None
+        );
     }
 
     #[test]
-    fn missing_project_webhooks_errors() {
+    fn missing_project_webhooks_security_errors() {
         with_env(
             &[
-                ("PROJECT_WEBHOOKS", None),
+                ("PROJECT_WEBHOOKS_SECURITY", None),
                 ("ALLOWED_USERS", Some("alice")),
             ],
             || {
                 let err = Config::from_env().unwrap_err();
-                assert!(matches!(err, ConfigError::MissingVar("PROJECT_WEBHOOKS")));
+                assert!(matches!(
+                    err,
+                    ConfigError::MissingVar("PROJECT_WEBHOOKS_SECURITY")
+                ));
             },
         );
     }

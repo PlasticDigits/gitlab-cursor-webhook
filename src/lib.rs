@@ -6,5 +6,8 @@ pub mod dedup;
 pub mod filter;
 pub mod routes;
 
-pub use config::Config;
-pub use filter::{should_forward, GitLabMrWebhook, SkipReason};
+pub use config::{Config, WebhookAgent};
+pub use filter::{
+    should_forward, should_forward_issue, GitLabIssueWebhook, GitLabMrWebhook, IssueAgent,
+    SkipReason,
+};

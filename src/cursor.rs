@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::filter::GitLabMrWebhook;
+use crate::filter::{GitLabIssueWebhook, GitLabMrWebhook, IssueAgent, Label};
 
 #[derive(Debug, Serialize)]
 pub struct CursorPayload<'a> {
@@ -20,6 +20,19 @@ pub struct CursorPayload<'a> {
     pub title: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_commit: Option<&'a crate::filter::LastCommit>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CursorIssuePayload<'a> {
+    pub event_type: &'a str,
+    pub agent: &'a str,
+    pub username: &'a str,
+    pub project_name: &'a str,
+    pub web_url: &'a str,
+    pub description: &'a str,
+    pub iid: u64,
+    pub title: &'a str,
+    pub labels: &'a [Label],
 }
 
 impl<'a> CursorPayload<'a> {
@@ -39,6 +52,23 @@ impl<'a> CursorPayload<'a> {
     }
 }
 
+impl<'a> CursorIssuePayload<'a> {
+    pub fn from_gitlab(payload: &'a GitLabIssueWebhook, agent: IssueAgent) -> Self {
+        let attrs = &payload.object_attributes;
+        Self {
+            event_type: &attrs.action,
+            agent: agent.as_str(),
+            username: &payload.user.username,
+            project_name: &payload.project.name,
+            web_url: attrs.url.as_deref().unwrap_or(""),
+            description: attrs.description.as_deref().unwrap_or(""),
+            iid: attrs.iid,
+            title: &attrs.title,
+            labels: &payload.labels,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CursorForwardError {
     #[error("cursor request failed: {0}")]
@@ -52,11 +82,31 @@ pub async fn forward_to_cursor(
     payload: &GitLabMrWebhook,
 ) -> Result<(StatusCode, Bytes), CursorForwardError> {
     let body = CursorPayload::from_gitlab(payload);
+    forward_json(client, webhook_url, cursor_token, &body).await
+}
+
+pub async fn forward_issue_to_cursor(
+    client: &Client,
+    webhook_url: &str,
+    cursor_token: &str,
+    payload: &GitLabIssueWebhook,
+    agent: IssueAgent,
+) -> Result<(StatusCode, Bytes), CursorForwardError> {
+    let body = CursorIssuePayload::from_gitlab(payload, agent);
+    forward_json(client, webhook_url, cursor_token, &body).await
+}
+
+async fn forward_json(
+    client: &Client,
+    webhook_url: &str,
+    cursor_token: &str,
+    body: &impl Serialize,
+) -> Result<(StatusCode, Bytes), CursorForwardError> {
     let response = client
         .post(webhook_url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", cursor_token))
-        .json(&body)
+        .json(body)
         .send()
         .await?;
 
