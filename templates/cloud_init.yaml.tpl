@@ -2,8 +2,8 @@
 write_files:
   - path: /etc/gch/job.env
     permissions: '0600'
-    owner:
-      name: agent
+    owner: agent:agent
+    defer: true
     content: |
       GCH_JOB_ID=${job_id}
       GCH_CONTROLLER_URL=${controller_url}

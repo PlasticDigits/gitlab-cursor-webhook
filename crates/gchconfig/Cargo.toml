@@ -13,6 +13,7 @@ path = "src/main.rs"
 clap.workspace = true
 dotenvy.workspace = true
 gch-core = { path = "../gch-core" }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+uuid.workspace = true

@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use chrono::Utc;
 use gch_core::{
     db::Database,
     dedup::{commit_key, issue_key, DedupCache},
+    job_api::{JobListResponse, JobSummary},
+    server_ipv4_from_tfstate,
     filter::{
         should_forward, should_forward_issue, GitLabIssueWebhook,
         GitLabMrWebhook, IssueAgent, Project, SkipReason, WebhookEnvelope,
@@ -27,7 +31,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::config::ControllerConfig;
-use crate::jobs::JobStore;
+use crate::jobs::{JobRecord, JobStore};
 use crate::provision::{provision_job, ProvisionError, ProvisionRequest};
 
 #[derive(Clone)]
@@ -47,6 +51,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs/{job_id}/heartbeat", post(heartbeat))
         .route("/api/jobs/{job_id}/status", post(job_status))
         .route("/api/jobs/{job_id}/complete", post(complete_job))
+        .route("/api/admin/jobs", get(admin_list_jobs))
+        .route("/api/admin/jobs/{job_id}", get(admin_get_job))
         .with_state(state)
 }
 
@@ -79,6 +85,99 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(str::trim)
         .map(str::to_string)
+}
+
+#[derive(Debug, Deserialize)]
+struct AdminJobsQuery {
+    active: Option<bool>,
+}
+
+fn verify_admin(state: &AppState, headers: &HeaderMap) -> bool {
+    let Some(expected) = &state.config.admin_token else {
+        return false;
+    };
+    bearer_token(headers).as_deref() == Some(expected.as_str())
+}
+
+fn admin_auth_failed(state: &AppState) -> Response {
+    if state.config.admin_token.is_none() {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "error": "admin_api_disabled",
+                "message": "set GCH_ADMIN_TOKEN on the controller to enable job listing"
+            })),
+        )
+            .into_response()
+    } else {
+        StatusCode::UNAUTHORIZED.into_response()
+    }
+}
+
+fn job_to_summary(job: &JobRecord, jobs_dir: &std::path::Path, detailed: bool) -> JobSummary {
+    let age_secs = Utc::now()
+        .signed_duration_since(job.created_at)
+        .num_seconds()
+        .max(0) as u64;
+    let last_heartbeat_secs_ago = job
+        .last_heartbeat
+        .map(|hb| Instant::now().duration_since(hb).as_secs());
+    let server_ipv4 = server_ipv4_from_tfstate(&job.terraform_dir)
+        .or_else(|| server_ipv4_from_tfstate(&jobs_dir.join(job.job_id.to_string())));
+
+    JobSummary {
+        job_id: job.job_id.to_string(),
+        status: job.status.as_str().to_string(),
+        phase: job.phase.clone(),
+        status_message: job.status_message.clone(),
+        project: job.project_gitlab_path.clone(),
+        tag: job.tag.to_string(),
+        iid: job.iid,
+        object_kind: job.object_kind.clone(),
+        model: job.model.clone(),
+        created_at: job.created_at.to_rfc3339(),
+        completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+        last_heartbeat_secs_ago,
+        age_secs,
+        server_ipv4,
+        git_ref: detailed.then(|| job.git_ref.clone()).flatten(),
+        workspace_path: detailed.then(|| job.workspace_path.clone()),
+    }
+}
+
+async fn admin_list_jobs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminJobsQuery>,
+) -> Response {
+    if !verify_admin(&state, &headers) {
+        return admin_auth_failed(&state);
+    }
+
+    let active_only = query.active.unwrap_or(false);
+    let jobs = state.jobs.list(active_only).await;
+    let summaries: Vec<JobSummary> = jobs
+        .iter()
+        .map(|job| job_to_summary(job, &state.config.jobs_dir, false))
+        .collect();
+
+    Json(JobListResponse { jobs: summaries }).into_response()
+}
+
+async fn admin_get_job(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Response {
+    if !verify_admin(&state, &headers) {
+        return admin_auth_failed(&state);
+    }
+
+    let Some(job) = state.jobs.get(job_id).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    Json(job_to_summary(&job, &state.config.jobs_dir, true)).into_response()
 }
 
 async fn webhook(
@@ -284,10 +383,10 @@ async fn provision_result(
                 agent,
                 job_id = %job_id,
                 provisioned = true,
-                "job provisioned"
+                "job accepted, provisioning in background"
             );
             ok_response(json!({
-                "status": "provisioned",
+                "status": "accepted",
                 "job_id": job_id,
             }))
         }

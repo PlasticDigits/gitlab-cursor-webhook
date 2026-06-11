@@ -24,6 +24,7 @@ pub struct ControllerConfig {
     pub terraform_module_dir: PathBuf,
     pub cloud_init_template: PathBuf,
     pub provision_enabled: bool,
+    pub admin_token: Option<String>,
     pub settings: Settings,
 }
 
@@ -145,6 +146,11 @@ impl ControllerConfig {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(true);
 
+        let admin_token = env::var("GCH_ADMIN_TOKEN")
+            .ok()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
+
         Ok((
             Self {
                 listen_addr,
@@ -162,6 +168,7 @@ impl ControllerConfig {
                 terraform_module_dir,
                 cloud_init_template,
                 provision_enabled,
+                admin_token,
                 settings,
             },
             db,

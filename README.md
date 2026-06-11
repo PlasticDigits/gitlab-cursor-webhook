@@ -23,6 +23,8 @@ Filter GitLab webhooks and provision ephemeral **Hetzner agent VMs** from golden
 | `POST` | `/api/jobs/{job_id}/heartbeat` | Agent heartbeat (every 60s) |
 | `POST` | `/api/jobs/{job_id}/status` | Optional progress callback |
 | `POST` | `/api/jobs/{job_id}/complete` | Agent finished — triggers VM destroy |
+| `GET` | `/api/admin/jobs` | List in-memory jobs (Bearer `GCH_ADMIN_TOKEN`) |
+| `GET` | `/api/admin/jobs/{job_id}` | Job details (Bearer `GCH_ADMIN_TOKEN`) |
 
 ## Flow
 
@@ -59,6 +61,9 @@ gchconfig tag add --project yieldomega --name security --snapshot 12345678
 gchconfig prompt set --project yieldomega --tag security --file prompts/security.md
 gchconfig setting controller_url https://gch.example.com
 gchconfig doctor
+gchconfig jobs list              # requires GCH_ADMIN_TOKEN + controller_url
+gchconfig jobs list --active     # provisioning or running only
+gchconfig jobs show <job-uuid>
 ```
 
 Migrate legacy env-based project paths:

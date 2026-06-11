@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::Arc;
 
 use chrono::Utc;
 use gch_core::db::ResolvedTag;
@@ -39,7 +40,7 @@ pub struct ProvisionRequest {
 
 pub async fn provision_job(
     config: &ControllerConfig,
-    jobs: &JobStore,
+    jobs: &Arc<JobStore>,
     req: ProvisionRequest,
 ) -> Result<(Uuid, String), ProvisionError> {
     let active = jobs.count_active().await;
@@ -104,17 +105,21 @@ pub async fn provision_job(
     jobs.insert(job).await;
 
     if config.provision_enabled {
-        match run_terraform(&terraform_dir, "apply", true).await {
-            Ok(()) => {
-                info!(%job_id, "terraform apply succeeded");
+        // Return before terraform finishes — GitLab webhook delivery times out (~10s).
+        let jobs = Arc::clone(jobs);
+        let terraform_dir = terraform_dir.clone();
+        tokio::spawn(async move {
+            match run_terraform(&terraform_dir, "apply", true).await {
+                Ok(()) => {
+                    info!(%job_id, "terraform apply succeeded");
+                }
+                Err(e) => {
+                    error!(%job_id, error = %e, "terraform apply failed");
+                    jobs.remove(job_id).await;
+                    let _ = destroy_workspace(&terraform_dir).await;
+                }
             }
-            Err(e) => {
-                error!(%job_id, error = %e, "terraform apply failed");
-                jobs.remove(job_id).await;
-                let _ = destroy_workspace(&terraform_dir).await;
-                return Err(e);
-            }
-        }
+        });
     } else {
         warn!(%job_id, "GCH_PROVISION_ENABLED=false, skipping terraform apply");
     }

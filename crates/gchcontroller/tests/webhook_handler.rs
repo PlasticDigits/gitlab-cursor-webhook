@@ -3,8 +3,11 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use chrono::Utc;
+use gch_core::tag::WebhookTag;
+use gchcontroller::jobs::{JobRecord, JobStatus};
 
 use axum::{
     body::Body,
@@ -112,6 +115,7 @@ fn test_config() -> Arc<ControllerConfig> {
         terraform_module_dir: root.join("terraform/modules/agent-vm"),
         cloud_init_template: root.join("templates/cloud_init.yaml.tpl"),
         provision_enabled: false,
+        admin_token: Some("admin-test-token".into()),
         settings: Settings {
             controller_url: "http://127.0.0.1:8080".into(),
             firewall_id: "fw-test".into(),
@@ -196,7 +200,7 @@ async fn open_webhook_provisions_job() {
     let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_json(response).await;
-    assert_eq!(json["status"], "provisioned");
+    assert_eq!(json["status"], "accepted");
     assert!(json["job_id"].is_string());
 }
 
@@ -219,7 +223,7 @@ async fn issue_open_with_verify_label_provisions() {
     let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_json(response).await;
-    assert_eq!(json["status"], "provisioned");
+    assert_eq!(json["status"], "accepted");
 }
 
 #[tokio::test]
@@ -232,7 +236,7 @@ async fn duplicate_issue_webhook_is_skipped() {
         .oneshot(signed_webhook_request(body))
         .await
         .unwrap();
-    assert_eq!(response_json(first).await["status"], "provisioned");
+    assert_eq!(response_json(first).await["status"], "accepted");
 
     let second = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(
@@ -246,7 +250,7 @@ async fn issue_update_with_label_added_provisions_implement() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/issue_update_label_added.json");
     let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
-    assert_eq!(response_json(response).await["status"], "provisioned");
+    assert_eq!(response_json(response).await["status"], "accepted");
 }
 
 #[tokio::test]
@@ -259,7 +263,7 @@ async fn duplicate_open_webhook_is_skipped() {
         .oneshot(signed_webhook_request(body))
         .await
         .unwrap();
-    assert_eq!(response_json(first).await["status"], "provisioned");
+    assert_eq!(response_json(first).await["status"], "accepted");
 
     let second = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(
@@ -277,6 +281,68 @@ async fn job_api_requires_bearer_token() {
         .oneshot(
             Request::builder()
                 .uri("/api/jobs/00000000-0000-0000-0000-000000000000")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn admin_jobs_lists_in_memory_jobs() {
+    let state = test_state();
+    let job_id = uuid::Uuid::new_v4();
+    state
+        .jobs
+        .insert(JobRecord {
+            job_id,
+            token_hash: "hash".into(),
+            project_gitlab_path: "group/example-project".into(),
+            tag: WebhookTag::Security,
+            iid: 42,
+            object_kind: "merge_request".into(),
+            prompt: "review".into(),
+            model: "composer-2.5".into(),
+            workspace_path: "/home/agent/workspace".into(),
+            git_ref: Some("main".into()),
+            status: JobStatus::Running,
+            phase: Some("agent".into()),
+            status_message: None,
+            created_at: Utc::now(),
+            last_heartbeat: None,
+            completed_at: None,
+            terraform_dir: state.config.jobs_dir.join(job_id.to_string()),
+            server_id: None,
+        })
+        .await;
+
+    let app = routes::router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/jobs")
+                .header("Authorization", "Bearer admin-test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_json(response).await;
+    assert_eq!(json["jobs"].as_array().unwrap().len(), 1);
+    assert_eq!(json["jobs"][0]["job_id"], job_id.to_string());
+    assert_eq!(json["jobs"][0]["status"], "running");
+}
+
+#[tokio::test]
+async fn admin_jobs_requires_token() {
+    let state = test_state();
+    let app = routes::router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/jobs")
                 .body(Body::empty())
                 .unwrap(),
         )

@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+mod jobs;
+
 use clap::{Parser, Subcommand};
 use gch_core::{
     db::Database,
@@ -58,6 +60,32 @@ enum Commands {
     },
     /// Import legacy PROJECT_WEBHOOKS_* env entries into SQLite (paths only)
     ImportEnv,
+    /// List and inspect agent jobs (queries running gchcontroller)
+    Jobs {
+        #[command(subcommand)]
+        action: JobCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum JobCommands {
+    /// List jobs known to the controller (falls back to on-disk terraform workspaces)
+    List {
+        /// Only show provisioning or running jobs
+        #[arg(long)]
+        active: bool,
+        /// List terraform workspaces on disk only (no controller API)
+        #[arg(long)]
+        disk: bool,
+    },
+    /// Show details for one job
+    Show {
+        /// Job UUID
+        job_id: String,
+        /// Read terraform workspace on disk only (no controller API)
+        #[arg(long)]
+        disk: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -240,6 +268,17 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             allowed_users,
         } => run_dry_run(&db, &fixture, allowed_users.as_deref())?,
         Commands::ImportEnv => run_import_env(&db)?,
+        Commands::Jobs { action } => {
+            let jobs_dir = jobs::default_jobs_dir();
+            match action {
+                JobCommands::List { active, disk } => {
+                    jobs::run_jobs_list(&db, &jobs_dir, active, disk)?;
+                }
+                JobCommands::Show { job_id, disk } => {
+                    jobs::run_jobs_show(&db, &jobs_dir, &job_id, disk)?;
+                }
+            }
+        }
     }
 
     Ok(())

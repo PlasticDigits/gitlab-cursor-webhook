@@ -20,6 +20,22 @@ pub enum JobStatus {
     Destroying,
 }
 
+impl JobStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Provisioning => "provisioning",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Destroying => "destroying",
+        }
+    }
+
+    pub const fn is_active(self) -> bool {
+        matches!(self, Self::Provisioning | Self::Running)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct JobRecord {
     pub job_id: Uuid,
@@ -157,6 +173,21 @@ impl JobStore {
 
     pub async fn list_for_reaper(&self) -> Vec<JobRecord> {
         self.jobs.read().await.values().cloned().collect()
+    }
+
+    pub async fn list(&self, active_only: bool) -> Vec<JobRecord> {
+        let jobs = self.jobs.read().await;
+        let mut list: Vec<JobRecord> = jobs
+            .values()
+            .filter(|j| !active_only || j.status.is_active())
+            .cloned()
+            .collect();
+        list.sort_by_key(|j| std::cmp::Reverse(j.created_at));
+        list
+    }
+
+    pub async fn list_all(&self) -> Vec<JobRecord> {
+        self.list(false).await
     }
 
     pub fn job_timeout(settings_secs: u64) -> Duration {
