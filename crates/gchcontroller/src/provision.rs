@@ -216,7 +216,8 @@ fn write_terraform_workspace(
         )
     };
 
-    let created_at = Utc::now().to_rfc3339();
+    // Hetzner label values allow only [a-zA-Z0-9_.-] — no RFC3339 colons/plus signs.
+    let created_at = Utc::now().timestamp().to_string();
 
     let main_tf = format!(
         r#"
