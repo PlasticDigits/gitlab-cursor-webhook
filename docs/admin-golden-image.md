@@ -18,8 +18,24 @@ Approximate cost: billed per hour while the VM runs; snapshots incur small stora
 ### 1. Create builder VM
 
 1. Hetzner Cloud Console → **Add Server**
-2. Ubuntu 24.04, CPX32, location Falkenstein (`fsn1`), your SSH key
-3. SSH in as root
+2. Ubuntu **24.04** (not 26.04), CPX32, location Falkenstein (`fsn1`), your SSH key
+3. SSH in as root and confirm OS:
+
+```bash
+lsb_release -ds    # expect Ubuntu 24.04.x
+```
+
+### 1b. Prerequisites (project repo)
+
+`gch-cloud-setup.sh` is run from the **GitLab project** clone, not from this repo. Before building, ensure `plasticdigits/cl8y-dex-terraclassic` (or yieldomega) on `main` includes:
+
+| File | Requirement |
+|------|-------------|
+| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; after `npm ci`, `npx playwright install` via `with-node.sh` |
+| `gch-cloud-init-runner.sh` | `jq -r '.git_ref // empty'` (not bare `empty` as filename) |
+| `scripts/setup-cloud-agent-localterra.sh` | `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` before `playwright install` |
+
+Copy from `gitlab-cursor-webhook/docs/examples/cl8y-dex-terraclassic/` if the project repo is behind.
 
 ### 2. Clone project and run setup
 
@@ -57,16 +73,26 @@ Optional: override the finalize model with `GCH_GOLDEN_IMAGE_MODEL=composer-2.5-
 
 After setup, review `/home/agent/.gch/golden-image-verify.log`.
 
-**Before snapshot, confirm baked image:**
+**Playwright browsers (Terra Classic / `frontend-dapp`):** `gch-cloud-setup.sh` runs `npm ci` in `frontend-dapp`, then installs browsers from that package’s locked `@playwright/test` version:
 
 ```bash
-grep "git_ref" /home/agent/gch-cloud-init-runner.sh    # jq -r '.git_ref // empty'
-test -f /etc/profile.d/gch-agent.sh
-grep job.env /home/agent/.bashrc
-grep PLAYWRIGHT /home/agent/workspace/scripts/setup-cloud-agent-localterra.sh || true
+export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
+bash scripts/with-node.sh --cwd frontend-dapp -- npx playwright install
 ```
 
-The project repo should include the latest `gch-cloud-init-runner.sh` (or `GCH_RUNNER_URL` pointing at `main` with the jq fix). `setup-cloud-agent-localterra.sh` must export `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` before `playwright install`.
+Browsers are cached under `~/.cache/ms-playwright/` (not `frontend-dapp/node_modules/.cache/`). Use full `playwright install` — not `install chromium` alone — so `chromium_headless_shell` matches e2e tests.
+
+If setup was interrupted or `frontend-dapp` dependencies changed, re-run as `agent` before snapshot:
+
+```bash
+sudo -u agent bash -lc '
+  export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
+  cd /home/agent/workspace
+  bash scripts/with-node.sh --cwd frontend-dapp -- npx playwright install
+'
+```
+
+Do not install Playwright from a separate `~/.gch/playwright` sandbox — that can pin a different browser build than `frontend-dapp` and break e2e.
 
 ### 3. Verify agent user
 
@@ -84,9 +110,39 @@ The `agent` user must have:
 - Passwordless sudo (`/etc/sudoers.d/agent`)
 - Membership in `docker` group
 
+**Confirm baked image** (must pass before snapshot):
+
+```bash
+grep "git_ref" /home/agent/gch-cloud-init-runner.sh
+# expect: jq -r '.git_ref // empty'
+
+test -f /etc/profile.d/gch-agent.sh
+grep -q 'GCH job secrets' /home/agent/.bashrc
+grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE /home/agent/workspace/scripts/setup-cloud-agent-localterra.sh
+
+# Playwright browsers for frontend-dapp (default cache: ~/.cache/ms-playwright)
+sudo -u agent bash -lc 'ls "$HOME/.cache/ms-playwright"/chromium-* "$HOME/.cache/ms-playwright"/chromium_headless_shell-* >/dev/null'
+```
+
+If `apt upgrade` installed a new kernel during setup, **reboot** and re-run the smoke checks above before cleanup:
+
+```bash
+reboot
+# after SSH back:
+uname -r
+sudo -u agent agent about
+```
+
+Optional (Terra Classic): stop job-local docker so the snapshot is clean:
+
+```bash
+sudo -u agent bash -lc 'cd /home/agent/workspace && make stop' || true
+sudo -u agent docker ps   # expect empty
+```
+
 ### 4. Pre-snapshot cleanup
 
-Run as root **after** setup completes:
+Run as root **after** setup completes and checks pass:
 
 ```bash
 apt-get clean
@@ -104,12 +160,19 @@ truncate -s 0 /root/.bash_history /home/agent/.bash_history
 
 ### 6. Register in gchconfig
 
-On the controller host, follow the project runbook:
+On the controller host, point all three tags at the new snapshot ID:
 
-- [runbook-cl8y-dex-terraclassic.md](runbook-cl8y-dex-terraclassic.md) — Terra Classic (full `gchconfig` + webhook steps)
-- yieldomega — same pattern; prompts under `docs/examples/yieldomega/prompts/`
+```bash
+source /opt/gitlab-cursor-webhook/scripts/gch-controller-shell.sh
+SNAPSHOT=<new_id>
+run_gch tag add --project cl8y-dex-terraclassic --name security   --snapshot "$SNAPSHOT"
+run_gch tag add --project cl8y-dex-terraclassic --name verify     --snapshot "$SNAPSHOT"
+run_gch tag add --project cl8y-dex-terraclassic --name implement  --snapshot "$SNAPSHOT"
+```
 
-Typically one snapshot ID serves all three tags (`security`, `verify`, `implement`).
+Full webhook and signing-token steps: [runbook-cl8y-dex-terraclassic.md](runbook-cl8y-dex-terraclassic.md).
+
+Ensure controller `GITLAB_TOKEN` in `/etc/gitlab-cursor-webhook.env` is valid for `glab` (not baked into the snapshot).
 
 ### VM placement fallbacks
 
