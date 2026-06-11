@@ -88,7 +88,7 @@ gch_run_job() {
   workspace="$(echo "${job_json}" | jq -r .workspace)"
   prompt="$(echo "${job_json}" | jq -r .prompt)"
   model="$(echo "${job_json}" | jq -r .model)"
-  git_ref="$(echo "${job_json}" | jq -r .git_ref // empty)"
+  git_ref="$(echo "${job_json}" | jq -r '.git_ref // empty')"
 
   post_status "boot" "cloud-init runner started"
   start_heartbeat
