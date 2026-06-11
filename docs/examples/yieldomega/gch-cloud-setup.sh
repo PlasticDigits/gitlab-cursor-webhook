@@ -67,6 +67,7 @@ sudo -u "${AGENT_USER}" bash -lc '
   npm init -y
   npm install @playwright/test
   npx playwright install chromium
+  sudo -E env "PATH=$PATH" npx playwright install-deps
 '
 echo "==> glab"
 GLAB_VERSION="${GLAB_VERSION:-1.102.0}"

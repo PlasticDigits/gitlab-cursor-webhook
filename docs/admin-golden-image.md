@@ -31,7 +31,7 @@ lsb_release -ds    # expect Ubuntu 24.04.x
 
 | File | Requirement |
 |------|-------------|
-| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; after `npm ci`, `npx playwright install` via `with-node.sh` |
+| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; after `npm ci`, `playwright install` + `install-deps` |
 | `gch-cloud-init-runner.sh` | `jq -r '.git_ref // empty'` (not bare `empty` as filename) |
 | `scripts/setup-cloud-agent-localterra.sh` | `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` before `playwright install` |
 
@@ -73,12 +73,7 @@ Optional: override the finalize model with `GCH_GOLDEN_IMAGE_MODEL=composer-2.5-
 
 After setup, review `/home/agent/.gch/golden-image-verify.log`.
 
-**Playwright browsers (Terra Classic / `frontend-dapp`):** `gch-cloud-setup.sh` runs `npm ci` in `frontend-dapp`, then installs browsers from that package’s locked `@playwright/test` version:
-
-```bash
-export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
-bash scripts/with-node.sh --cwd frontend-dapp -- npx playwright install
-```
+**Playwright browsers (Terra Classic / `frontend-dapp`):** `gch-cloud-setup.sh` runs `npm ci` in `frontend-dapp`, installs browsers from that package’s locked `@playwright/test` version, then `npx playwright install-deps` for apt libraries (GTK, GStreamer, etc.).
 
 Browsers are cached under `~/.cache/ms-playwright/` (not `frontend-dapp/node_modules/.cache/`). Use full `playwright install` — not `install chromium` alone — so `chromium_headless_shell` matches e2e tests.
 
@@ -87,10 +82,16 @@ If setup was interrupted or `frontend-dapp` dependencies changed, re-run as `age
 ```bash
 sudo -u agent bash -lc '
   export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
-  cd /home/agent/workspace
-  bash scripts/with-node.sh --cwd frontend-dapp -- npx playwright install
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  nvm use 24.15.0
+  cd /home/agent/workspace/frontend-dapp
+  npx playwright install
+  sudo -E env "PATH=$PATH" npx playwright install-deps
 '
 ```
+
+Avoid `with-node.sh` for Playwright on Node 24.16+ — it can hang during browser zip extraction. Pin `.nvmrc` to `24.15.0` or upgrade `@playwright/test` to ≥ 1.60.0.
 
 Do not install Playwright from a separate `~/.gch/playwright` sandbox — that can pin a different browser build than `frontend-dapp` and break e2e.
 

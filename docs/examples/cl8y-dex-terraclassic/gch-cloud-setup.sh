@@ -189,6 +189,13 @@ if [[ -d "${WORKSPACE}/frontend-dapp" ]]; then
       cd '${WORKSPACE}/frontend-dapp' && npx playwright install
     "
   fi
+
+  # Apt packages for WebKit/GStreamer/etc.; uses locked Playwright from npm ci.
+  echo "==> Playwright system dependencies (apt)"
+  _agent_nvm_sh "
+    cd '${WORKSPACE}/frontend-dapp'
+    sudo -E env \"PATH=\$PATH\" npx playwright install-deps
+  "
 fi
 
 echo "==> Golden image finalize (Cursor agent)"

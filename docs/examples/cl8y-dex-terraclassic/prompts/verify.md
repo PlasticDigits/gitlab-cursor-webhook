@@ -41,7 +41,13 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
 4. **Else — no changes (no MR):**
 
-   Write a closing comment in a temp file and post with `glab issue note --body-file`. The comment must include:
+   Write the closing comment to `/tmp/issue-{{iid}}-verify-comment.md` and post:
+
+   ```bash
+   glab issue note {{iid}} -m "$(cat /tmp/issue-{{iid}}-verify-comment.md)"
+   ```
+
+   The comment must include:
 
    - What you verified and PASS/FAIL/SKIP
    - How you verified
@@ -54,10 +60,10 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 ## Environment
 
 - Keplr wallet extension is installed in the browser profile — use as documented in project docs.
-- Use `$GITLAB_TOKEN` from the environment for `glab`.
+- Use `$GITLAB_TOKEN` for `glab`. Issue comments: `-m "$(cat file.md)"` only (no `--body-file` on 1.102.x).
 
 ## Cleanup
 
 When complete, remove any `agent:implement` or `agent:verify` labels from the issue.
 
-Do **not** run shell commands in the background. After `glab issue close` / `glab issue note` and label cleanup, stop — do not start new tools or installs.
+Do **not** run shell commands in the background. After `glab issue note`, `glab issue close`, and label cleanup, stop — do not start new tools or installs.

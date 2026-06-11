@@ -54,5 +54,9 @@ Do **not** report governance trust worries, speculative concerns, stylistic issu
 
 ## GitLab / glab
 
-- Use `$GITLAB_TOKEN` from the environment for `glab`.
+- Use `$GITLAB_TOKEN` for `glab`. Top-level MR summary: `glab mr note {{iid}} -m "$(cat file.md)"` (no `--body-file` on 1.102.x). Inline findings via MR review comments.
 - Do not mention co-authors, emails, or PII in commits.
+
+## Cleanup
+
+Do **not** run shell commands in the background. After the top-level MR comment (and `block:security` label if needed), stop.
