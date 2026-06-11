@@ -4,9 +4,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{HeaderMap, Request, StatusCode},
 };
 use gch_core::{db::Database, dedup::DedupCache};
 use gchcontroller::{
@@ -14,10 +16,43 @@ use gchcontroller::{
     jobs::JobStore,
     routes::{self, AppState},
 };
-use http_body_util::BodyExt;
 use gch_core::db::Settings;
+use http_body_util::BodyExt;
 use serde_json::Value;
+use standardwebhooks::{
+    Webhook, HEADER_WEBHOOK_ID, HEADER_WEBHOOK_SIGNATURE, HEADER_WEBHOOK_TIMESTAMP,
+};
 use tower::ServiceExt;
+
+const TEST_SIGNING_TOKEN: &str = "whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD";
+
+fn sign_webhook(body: &[u8]) -> HeaderMap {
+    let wh = Webhook::new(TEST_SIGNING_TOKEN).unwrap();
+    let msg_id = "msg_integration_test";
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let signature = wh.sign(msg_id, timestamp, body).unwrap();
+    let mut headers = HeaderMap::new();
+    headers.insert(HEADER_WEBHOOK_ID, msg_id.parse().unwrap());
+    headers.insert(HEADER_WEBHOOK_TIMESTAMP, timestamp.to_string().parse().unwrap());
+    headers.insert(HEADER_WEBHOOK_SIGNATURE, signature.parse().unwrap());
+    headers
+}
+
+fn signed_webhook_request(body: &str) -> Request<Body> {
+    let bytes = body.as_bytes().to_vec();
+    let signed = sign_webhook(&bytes);
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/webhook")
+        .header("content-type", "application/json");
+    for (name, value) in signed.iter() {
+        builder = builder.header(name, value);
+    }
+    builder.body(Body::from(bytes)).unwrap()
+}
 
 fn setup_db() -> Arc<Database> {
     let db = Database::open_in_memory().expect("db");
@@ -58,7 +93,7 @@ fn test_config() -> Arc<ControllerConfig> {
     let root = repo_root();
     Arc::new(ControllerConfig {
         listen_addr: "127.0.0.1:0".parse().unwrap(),
-        gitlab_webhook_secret: None,
+        gitlab_webhook: Webhook::new(TEST_SIGNING_TOKEN).unwrap(),
         allowed_users: ["plasticdigits", "brouie"]
             .into_iter()
             .map(str::to_string)
@@ -124,29 +159,7 @@ async fn health_returns_ok() {
 }
 
 #[tokio::test]
-async fn approval_webhook_is_skipped() {
-    let app = routes::router(test_state());
-    let body = include_str!("fixtures/mr_approval.json");
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response_json(response).await,
-        serde_json::json!({ "status": "skipped" })
-    );
-}
-
-#[tokio::test]
-async fn open_webhook_provisions_job() {
+async fn unsigned_webhook_is_rejected() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/mr_open.json");
     let response = app
@@ -160,6 +173,26 @@ async fn open_webhook_provisions_job() {
         )
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn approval_webhook_is_skipped() {
+    let app = routes::router(test_state());
+    let body = include_str!("fixtures/mr_approval.json");
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+}
+
+#[tokio::test]
+async fn open_webhook_provisions_job() {
+    let app = routes::router(test_state());
+    let body = include_str!("fixtures/mr_open.json");
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_json(response).await;
     assert_eq!(json["status"], "provisioned");
@@ -170,17 +203,7 @@ async fn open_webhook_provisions_job() {
 async fn issue_hook_without_agent_label_is_skipped_with_ok() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/issue_hook.json");
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response_json(response).await,
@@ -192,17 +215,7 @@ async fn issue_hook_without_agent_label_is_skipped_with_ok() {
 async fn issue_open_with_verify_label_provisions() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/issue_open_with_verify_label.json");
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_json(response).await;
     assert_eq!(json["status"], "provisioned");
@@ -215,29 +228,12 @@ async fn duplicate_issue_webhook_is_skipped() {
 
     let first = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
+        .oneshot(signed_webhook_request(body))
         .await
         .unwrap();
     assert_eq!(response_json(first).await["status"], "provisioned");
 
-    let second = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let second = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(
         response_json(second).await,
         serde_json::json!({ "status": "skipped" })
@@ -248,17 +244,7 @@ async fn duplicate_issue_webhook_is_skipped() {
 async fn issue_update_with_label_added_provisions_implement() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/issue_update_label_added.json");
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(response_json(response).await["status"], "provisioned");
 }
 
@@ -269,29 +255,12 @@ async fn duplicate_open_webhook_is_skipped() {
 
     let first = app
         .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
+        .oneshot(signed_webhook_request(body))
         .await
         .unwrap();
     assert_eq!(response_json(first).await["status"], "provisioned");
 
-    let second = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/webhook")
-                .header("content-type", "application/json")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let second = app.oneshot(signed_webhook_request(body)).await.unwrap();
     assert_eq!(
         response_json(second).await,
         serde_json::json!({ "status": "skipped" })

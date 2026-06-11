@@ -53,16 +53,6 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
-fn verify_gitlab_token(headers: &HeaderMap, secret: Option<&str>) -> bool {
-    match secret {
-        None => true,
-        Some(expected) => headers
-            .get("X-Gitlab-Token")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|token| token == expected),
-    }
-}
-
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get("Authorization")
@@ -77,8 +67,8 @@ async fn webhook(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if !verify_gitlab_token(&headers, state.config.gitlab_webhook_secret.as_deref()) {
-        warn!("gitlab webhook rejected: invalid or missing X-Gitlab-Token");
+    if let Err(e) = state.config.gitlab_webhook.verify(&body, &headers) {
+        warn!(error = %e, "gitlab webhook rejected: invalid signature");
         return StatusCode::UNAUTHORIZED.into_response();
     }
 
@@ -497,23 +487,49 @@ fn ok_response(body: Value) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    #[test]
-    fn gitlab_token_check_skipped_when_secret_unset() {
-        let headers = HeaderMap::new();
-        assert!(verify_gitlab_token(&headers, None));
+    use super::*;
+    use standardwebhooks::{
+        Webhook, HEADER_WEBHOOK_ID, HEADER_WEBHOOK_SIGNATURE, HEADER_WEBHOOK_TIMESTAMP,
+    };
+
+    const TEST_SIGNING_TOKEN: &str = "whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD";
+
+    fn signed_headers(body: &[u8]) -> HeaderMap {
+        let wh = Webhook::new(TEST_SIGNING_TOKEN).unwrap();
+        let msg_id = "msg_test_webhook";
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let signature = wh.sign(msg_id, timestamp, body).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HEADER_WEBHOOK_ID, msg_id.parse().unwrap());
+        headers.insert(HEADER_WEBHOOK_TIMESTAMP, timestamp.to_string().parse().unwrap());
+        headers.insert(HEADER_WEBHOOK_SIGNATURE, signature.parse().unwrap());
+        headers
     }
 
     #[test]
-    fn gitlab_token_check_requires_match() {
-        let mut headers = HeaderMap::new();
-        assert!(!verify_gitlab_token(&headers, Some("secret")));
+    fn webhook_signature_valid() {
+        let body = br#"{"object_kind":"merge_request"}"#;
+        let wh = Webhook::new(TEST_SIGNING_TOKEN).unwrap();
+        assert!(wh.verify(body, &signed_headers(body)).is_ok());
+    }
 
-        headers.insert("X-Gitlab-Token", "wrong".parse().unwrap());
-        assert!(!verify_gitlab_token(&headers, Some("secret")));
+    #[test]
+    fn webhook_signature_rejects_missing_headers() {
+        let body = br#"{"object_kind":"merge_request"}"#;
+        let wh = Webhook::new(TEST_SIGNING_TOKEN).unwrap();
+        assert!(wh.verify(body, &HeaderMap::new()).is_err());
+    }
 
-        headers.insert("X-Gitlab-Token", "secret".parse().unwrap());
-        assert!(verify_gitlab_token(&headers, Some("secret")));
+    #[test]
+    fn webhook_signature_rejects_tampered_body() {
+        let body = br#"{"object_kind":"merge_request"}"#;
+        let wh = Webhook::new(TEST_SIGNING_TOKEN).unwrap();
+        let tampered = br#"{"object_kind":"issue"}"#;
+        assert!(wh.verify(tampered, &signed_headers(body)).is_err());
     }
 }

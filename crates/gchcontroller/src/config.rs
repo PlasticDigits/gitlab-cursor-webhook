@@ -6,12 +6,12 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use gch_core::db::{Database, Settings};
+use standardwebhooks::Webhook;
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
 pub struct ControllerConfig {
     pub listen_addr: SocketAddr,
-    pub gitlab_webhook_secret: Option<String>,
+    pub gitlab_webhook: Webhook,
     pub allowed_users: HashSet<String>,
     pub dedup_ttl_secs: u64,
     pub issue_dedup_ttl_secs: u64,
@@ -35,22 +35,38 @@ pub enum ConfigError {
     MissingVar(&'static str),
     #[error("invalid PORT value: {0}")]
     InvalidPort(String),
+    #[error("invalid GITLAB_WEBHOOK_SIGNING_TOKEN: expected whsec_... base64 key")]
+    InvalidSigningToken,
+    #[error("invalid LISTEN_ADDR value: {0}")]
+    InvalidListenAddr(String),
     #[error("database error: {0}")]
     Database(#[from] gch_core::db::DbError),
 }
 
 impl ControllerConfig {
     pub fn from_env() -> Result<(Self, Database), ConfigError> {
-        let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-        let port: u16 = port
-            .parse()
-            .map_err(|_| ConfigError::InvalidPort(port.clone()))?;
-        let listen_addr = SocketAddr::from(([0, 0, 0, 0], port));
+        let listen_addr = match env::var("LISTEN_ADDR") {
+            Ok(addr) if !addr.trim().is_empty() => addr
+                .trim()
+                .parse()
+                .map_err(|_| ConfigError::InvalidListenAddr(addr))?,
+            _ => {
+                let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+                let port: u16 = port
+                    .parse()
+                    .map_err(|_| ConfigError::InvalidPort(port.clone()))?;
+                SocketAddr::from(([0, 0, 0, 0], port))
+            }
+        };
 
-        let gitlab_webhook_secret = env::var("GITLAB_WEBHOOK_SECRET")
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let signing_token = env::var("GITLAB_WEBHOOK_SIGNING_TOKEN")
+            .map_err(|_| ConfigError::MissingVar("GITLAB_WEBHOOK_SIGNING_TOKEN"))?;
+        let signing_token = signing_token.trim();
+        if signing_token.is_empty() {
+            return Err(ConfigError::MissingVar("GITLAB_WEBHOOK_SIGNING_TOKEN"));
+        }
+        let gitlab_webhook =
+            Webhook::new(signing_token).map_err(|_| ConfigError::InvalidSigningToken)?;
 
         let allowed_users_raw = env::var("ALLOWED_USERS").unwrap_or_default();
         let allowed_users: HashSet<String> = allowed_users_raw
@@ -145,7 +161,7 @@ impl ControllerConfig {
         Ok((
             Self {
                 listen_addr,
-                gitlab_webhook_secret,
+                gitlab_webhook,
                 allowed_users,
                 dedup_ttl_secs,
                 issue_dedup_ttl_secs,

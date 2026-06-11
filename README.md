@@ -18,7 +18,7 @@ Filter GitLab webhooks and provision ephemeral **Hetzner agent VMs** from golden
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Liveness — `{"status":"ok"}` |
-| `POST` | `/webhook` | GitLab webhook ingress |
+| `POST` | `/webhook` | GitLab webhook ingress (Standard Webhooks HMAC signature) |
 | `GET` | `/api/jobs/{job_id}` | Agent VM fetches job (Bearer `JOB_RUNTIME_TOKEN`) |
 | `POST` | `/api/jobs/{job_id}/heartbeat` | Agent heartbeat (every 60s) |
 | `POST` | `/api/jobs/{job_id}/status` | Optional progress callback |

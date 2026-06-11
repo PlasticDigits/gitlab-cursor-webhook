@@ -22,6 +22,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+standardwebhooks = "1.0"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["util"] }

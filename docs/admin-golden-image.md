@@ -112,6 +112,14 @@ Run `gchcontroller` on a small always-on VM (e.g. CX23) with:
 
 - `HCLOUD_TOKEN`, `GCH_FIREWALL_ID`, `GCH_CONTROLLER_URL`
 - `CURSOR_API_KEY`, `GITLAB_TOKEN`
-- `ALLOWED_USERS`, `GITLAB_WEBHOOK_SECRET`
+- `ALLOWED_USERS`, `GITLAB_WEBHOOK_SIGNING_TOKEN` (from GitLab webhook **Generate signing token**)
 - Terraform CLI installed
 - `GCH_DB_PATH` (default `/var/lib/gch/gch.db`)
+
+### GitLab webhook
+
+In each project or group: **Settings → Webhooks**
+
+- **URL:** `{GCH_CONTROLLER_URL}/webhook`
+- **Trigger:** Merge request events, Issue events
+- **Authentication:** **Generate signing token** (not Secret token). Copy the one-time `whsec_...` value into `GITLAB_WEBHOOK_SIGNING_TOKEN` on the controller host.
