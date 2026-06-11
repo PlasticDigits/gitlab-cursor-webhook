@@ -285,8 +285,12 @@ fn run_doctor(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
         println!("[OK] HCLOUD_TOKEN set");
     }
 
-    for bin in ["terraform", "hcloud"] {
-        match Command::new(bin).arg("version").output() {
+    for bin in ["terraform"] {
+        match Command::new(bin)
+            .arg("version")
+            .current_dir("/tmp")
+            .output()
+        {
             Ok(o) if o.status.success() => println!("[OK] {bin} available"),
             _ => {
                 println!("[WARN] {bin} not found or failed");
