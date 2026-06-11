@@ -128,6 +128,18 @@ Run `gchcontroller` on a small always-on VM (e.g. CX23) with:
 - `ALLOWED_USERS` (per-project webhook signing tokens are stored in SQLite via `gchconfig`)
 - Terraform CLI installed
 - `GCH_DB_PATH` (default `/var/lib/gch/gch.db`)
+- `GCH_ADMIN_TOKEN` (optional; enables `gchconfig jobs` and `/api/admin/jobs`)
+
+### Shell helper (controller)
+
+Persist `run_gch` across SSH sessions:
+
+```bash
+grep -q gch-controller-shell.sh ~/.bashrc 2>/dev/null || \
+  echo 'source /opt/gitlab-cursor-webhook/scripts/gch-controller-shell.sh' >> ~/.bashrc
+source ~/.bashrc
+run_gch jobs list --active
+```
 
 ### GitLab webhook
 

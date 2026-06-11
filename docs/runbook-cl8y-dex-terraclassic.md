@@ -53,18 +53,13 @@ On the controller host:
 
 ```bash
 cd /opt/gitlab-cursor-webhook
-set -a
-source /etc/gitlab-cursor-webhook.env
-set +a
+source scripts/gch-controller-shell.sh   # defines run_gch; loads /etc/gitlab-cursor-webhook.env
 
 REPO=/opt/gitlab-cursor-webhook
-export GCH_DB_PATH=/var/lib/gch/gch.db
 
 # Fill these in before running:
 TERRA_SNAPSHOT=12345678            # Hetzner snapshot ID from golden image
 TERRA_SIGNING_TOKEN=whsec_...      # from GitLab webhook (step 1)
-
-run_gch() { sudo -u gch env GCH_DB_PATH="$GCH_DB_PATH" gchconfig "$@"; }
 
 run_gch project add --gitlab plasticdigits/cl8y-dex-terraclassic --workspace /home/agent/workspace
 run_gch project set-signing-token --gitlab plasticdigits/cl8y-dex-terraclassic --token "$TERRA_SIGNING_TOKEN"
