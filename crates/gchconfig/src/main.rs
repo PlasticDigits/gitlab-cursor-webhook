@@ -42,7 +42,7 @@ enum Commands {
     },
     /// Set global settings
     Setting {
-        /// Setting key (controller_url, firewall_id, job_timeout_secs, etc.)
+        /// Setting key (controller_url, firewall_id, job_timeout_secs, provisioning_timeout_secs, etc.)
         key: String,
         /// Setting value
         value: String,

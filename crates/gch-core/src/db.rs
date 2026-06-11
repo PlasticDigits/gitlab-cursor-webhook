@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ('job_timeout_secs', '10800');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('heartbeat_stale_secs', '300');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('provisioning_timeout_secs', '900');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('controller_url', '');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('firewall_id', '');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('max_concurrent_jobs', '10');
@@ -125,6 +126,7 @@ pub struct Settings {
     pub firewall_id: String,
     pub job_timeout_secs: u64,
     pub heartbeat_stale_secs: u64,
+    pub provisioning_timeout_secs: u64,
     pub max_concurrent_jobs: u64,
 }
 
@@ -511,6 +513,10 @@ impl Database {
                     .get("heartbeat_stale_secs")
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(300),
+                provisioning_timeout_secs: map
+                    .get("provisioning_timeout_secs")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(900),
                 max_concurrent_jobs: map
                     .get("max_concurrent_jobs")
                     .and_then(|s| s.parse().ok())

@@ -121,6 +121,7 @@ fn test_config() -> Arc<ControllerConfig> {
             firewall_id: "fw-test".into(),
             job_timeout_secs: 10_800,
             heartbeat_stale_secs: 300,
+            provisioning_timeout_secs: 900,
             max_concurrent_jobs: 10,
         },
     })

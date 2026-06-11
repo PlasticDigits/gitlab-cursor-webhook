@@ -197,6 +197,10 @@ impl JobStore {
     pub fn heartbeat_stale(settings_secs: u64) -> Duration {
         Duration::from_secs(settings_secs.max(30))
     }
+
+    pub fn provisioning_timeout(settings_secs: u64) -> Duration {
+        Duration::from_secs(settings_secs.max(60))
+    }
 }
 
 impl Default for JobStore {
