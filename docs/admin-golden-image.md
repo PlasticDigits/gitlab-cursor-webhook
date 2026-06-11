@@ -35,6 +35,15 @@ bash /tmp/gch-workspace/gch-cloud-setup.sh
 rm -rf /tmp/gch-workspace   # optional; repo is copied to /home/agent/workspace
 ```
 
+Example for YieldOmega (EVM / Rabby / Anvil):
+
+```bash
+git clone https://gitlab.com/plasticdigits/yieldomega /tmp/gch-workspace
+chmod +x /tmp/gch-workspace/gch-cloud-setup.sh
+export CURSOR_API_KEY='your-cursor-api-key'
+bash /tmp/gch-workspace/gch-cloud-setup.sh
+```
+
 Example for Terra Classic:
 
 ```bash
@@ -112,7 +121,7 @@ Run `gchcontroller` on a small always-on VM (e.g. CX23) with:
 
 - `HCLOUD_TOKEN`, `GCH_FIREWALL_ID`, `GCH_CONTROLLER_URL`
 - `CURSOR_API_KEY`, `GITLAB_TOKEN`
-- `ALLOWED_USERS`, `GITLAB_WEBHOOK_SIGNING_TOKEN` (from GitLab webhook **Generate signing token**)
+- `ALLOWED_USERS` (per-project webhook signing tokens are stored in SQLite via `gchconfig`)
 - Terraform CLI installed
 - `GCH_DB_PATH` (default `/var/lib/gch/gch.db`)
 
@@ -122,4 +131,8 @@ In each project or group: **Settings → Webhooks**
 
 - **URL:** `{GCH_CONTROLLER_URL}/webhook`
 - **Trigger:** Merge request events, Issue events
-- **Authentication:** **Generate signing token** (not Secret token). Copy the one-time `whsec_...` value into `GITLAB_WEBHOOK_SIGNING_TOKEN` on the controller host.
+- **Authentication:** **Generate signing token** (not Secret token). Copy the one-time `whsec_...` value into SQLite:
+
+```bash
+gchconfig project set-signing-token --gitlab group/project --token whsec_...
+```

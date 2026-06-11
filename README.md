@@ -54,6 +54,7 @@ See [`.env.example`](.env.example). Required:
 
 ```bash
 gchconfig project add --gitlab plasticdigits/yieldomega --workspace /home/agent/workspace
+gchconfig project set-signing-token --gitlab plasticdigits/yieldomega --token whsec_...
 gchconfig tag add --project yieldomega --name security --snapshot 12345678
 gchconfig prompt set --project yieldomega --tag security --file prompts/security.md
 gchconfig setting controller_url https://gch.example.com
@@ -93,7 +94,7 @@ Example project scripts:
 - [docs/examples/yieldomega/](docs/examples/yieldomega/) — EVM / Foundry / Rabby
 - [docs/examples/cl8y-dex-terraclassic/](docs/examples/cl8y-dex-terraclassic/) — Terra / Keplr
 
-Copy `gch-cloud-setup.sh`, `gch-cloud-init.sh`, `gch-cloud-init-runner.sh`, and `gch-golden-image-finalize.md` into each project repo before building snapshots.
+Copy `gch-cloud-setup.sh`, `gch-cloud-init.sh`, `gch-cloud-init-runner.sh`, `gch-golden-image-finalize.md`, and `prompts/` into each project repo before building snapshots.
 
 ## Terraform
 

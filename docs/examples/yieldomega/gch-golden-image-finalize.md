@@ -10,9 +10,10 @@ Complete the remaining setup and verify everything works. Use passwordless sudo 
    - Download the official Rabby browser extension (unpacked) into `/home/agent/.gch/extensions/rabby`
    - Use a stable release appropriate for headless Chromium/Playwright automation
 
-2. **Foundry / local EVM**
+2. **Anvil (local EVM)**
    - Verify Foundry (`forge`, `cast`, `anvil`) works
-   - Configure any project-specific local chain setup per this repo's README and docs
+   - Read this repo's README and docs for Anvil setup (native `anvil` or `docker-compose.anvil.yml` if present)
+   - Ensure Anvil can start and accept RPC connections for local development and Playwright dapp tests
 
 3. **Browser profile**
    - Ensure `/home/agent/.gch/browser-profile` exists and is usable for Playwright/Chromium with the Rabby extension

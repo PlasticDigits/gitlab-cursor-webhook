@@ -75,6 +75,12 @@ enum ProjectCommands {
         #[arg(long)]
         gitlab: String,
     },
+    SetSigningToken {
+        #[arg(long)]
+        gitlab: String,
+        #[arg(long)]
+        token: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -151,11 +157,20 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 let id = db.add_project(&gitlab, &name, &workspace)?;
                 println!("project added id={id} gitlab_path={gitlab}");
             }
+            ProjectCommands::SetSigningToken { gitlab, token } => {
+                db.set_project_signing_token(&gitlab, &token)?;
+                println!("signing token set for {gitlab}");
+            }
             ProjectCommands::List => {
                 for p in db.list_projects()? {
                     let status = if p.enabled { "enabled" } else { "disabled" };
+                    let token_status = if p.signing_token.is_some() {
+                        "signing_token=set"
+                    } else {
+                        "signing_token=missing"
+                    };
                     println!(
-                        "{} ({}) workspace={} [{}]",
+                        "{} ({}) workspace={} [{}] [{token_status}]",
                         p.gitlab_path, p.name, p.workspace_path, status
                     );
                 }
@@ -241,6 +256,15 @@ fn run_doctor(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
         ok = false;
     } else {
         println!("[OK] {} project(s)", projects.len());
+        for p in &projects {
+            if p.signing_token.is_none() {
+                println!(
+                    "[WARN] missing signing token for project {}",
+                    p.gitlab_path
+                );
+                ok = false;
+            }
+        }
     }
 
     let tags = db.list_tags(None)?;

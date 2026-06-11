@@ -22,6 +22,7 @@ use gch_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use standardwebhooks::Webhook;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -53,6 +54,24 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
+fn verify_gitlab_webhook(db: &Database, headers: &HeaderMap, body: &[u8]) -> bool {
+    let tokens = match db.list_project_signing_tokens() {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            error!(error = %e, "failed to load project signing tokens");
+            return false;
+        }
+    };
+    if tokens.is_empty() {
+        return false;
+    }
+    tokens.iter().any(|token| {
+        Webhook::new(token)
+            .ok()
+            .is_some_and(|wh| wh.verify(body, headers).is_ok())
+    })
+}
+
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get("Authorization")
@@ -67,8 +86,8 @@ async fn webhook(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if let Err(e) = state.config.gitlab_webhook.verify(&body, &headers) {
-        warn!(error = %e, "gitlab webhook rejected: invalid signature");
+    if !verify_gitlab_webhook(&state.db, &headers, &body) {
+        warn!("gitlab webhook rejected: invalid signature or no signing tokens configured");
         return StatusCode::UNAUTHORIZED.into_response();
     }
 

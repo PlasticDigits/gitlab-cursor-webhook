@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     workspace_path TEXT NOT NULL DEFAULT '/home/agent/workspace',
     enabled INTEGER NOT NULL DEFAULT 1,
+    signing_token TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -60,6 +61,34 @@ pub enum DbError {
     TagNotFound { project: String, tag: String },
     #[error("invalid tag name: {0}")]
     InvalidTag(String),
+    #[error("invalid signing token: expected whsec_... base64 key")]
+    InvalidSigningToken,
+}
+
+const PROJECT_SELECT: &str =
+    "SELECT id, gitlab_path, name, workspace_path, enabled, signing_token FROM projects";
+
+fn map_project_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
+    Ok(ProjectRecord {
+        id: row.get(0)?,
+        gitlab_path: row.get(1)?,
+        name: row.get(2)?,
+        workspace_path: row.get(3)?,
+        enabled: row.get::<_, i64>(4)? != 0,
+        signing_token: row.get(5)?,
+    })
+}
+
+fn migrate(conn: &Connection) -> Result<(), DbError> {
+    let has_column = conn
+        .prepare("PRAGMA table_info(projects)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(Result::ok)
+        .any(|name| name == "signing_token");
+    if !has_column {
+        conn.execute("ALTER TABLE projects ADD COLUMN signing_token TEXT", [])?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +98,7 @@ pub struct ProjectRecord {
     pub name: String,
     pub workspace_path: String,
     pub enabled: bool,
+    pub signing_token: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +154,7 @@ impl Database {
         }
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -132,6 +163,7 @@ impl Database {
     pub fn open_in_memory() -> Result<Self, DbError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -164,18 +196,42 @@ impl Database {
 
     pub fn list_projects(&self) -> Result<Vec<ProjectRecord>, DbError> {
         self.with_conn(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, gitlab_path, name, workspace_path, enabled FROM projects ORDER BY gitlab_path",
+            let mut stmt =
+                conn.prepare(&format!("{PROJECT_SELECT} ORDER BY gitlab_path"))?;
+            let rows = stmt.query_map([], map_project_row)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
+        })
+    }
+
+    pub fn set_project_signing_token(
+        &self,
+        gitlab_path: &str,
+        signing_token: &str,
+    ) -> Result<(), DbError> {
+        let signing_token = signing_token.trim();
+        if signing_token.is_empty() {
+            return Err(DbError::InvalidSigningToken);
+        }
+        standardwebhooks::Webhook::new(signing_token).map_err(|_| DbError::InvalidSigningToken)?;
+        self.with_conn(|conn| {
+            let n = conn.execute(
+                "UPDATE projects SET signing_token = ?2 WHERE gitlab_path = ?1",
+                params![gitlab_path, signing_token],
             )?;
-            let rows = stmt.query_map([], |row| {
-                Ok(ProjectRecord {
-                    id: row.get(0)?,
-                    gitlab_path: row.get(1)?,
-                    name: row.get(2)?,
-                    workspace_path: row.get(3)?,
-                    enabled: row.get::<_, i64>(4)? != 0,
-                })
-            })?;
+            if n == 0 {
+                return Err(DbError::ProjectNotFound(gitlab_path.to_string()));
+            }
+            Ok(())
+        })
+    }
+
+    pub fn list_project_signing_tokens(&self) -> Result<Vec<String>, DbError> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT signing_token FROM projects
+                 WHERE enabled = 1 AND signing_token IS NOT NULL AND signing_token != ''",
+            )?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
             rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
         })
     }
@@ -186,17 +242,9 @@ impl Database {
     ) -> Result<Option<ProjectRecord>, DbError> {
         self.with_conn(|conn| {
             conn.query_row(
-                "SELECT id, gitlab_path, name, workspace_path, enabled FROM projects WHERE gitlab_path = ?1",
+                &format!("{PROJECT_SELECT} WHERE gitlab_path = ?1"),
                 params![gitlab_path],
-                |row| {
-                    Ok(ProjectRecord {
-                        id: row.get(0)?,
-                        gitlab_path: row.get(1)?,
-                        name: row.get(2)?,
-                        workspace_path: row.get(3)?,
-                        enabled: row.get::<_, i64>(4)? != 0,
-                    })
-                },
+                map_project_row,
             )
             .optional()
             .map_err(DbError::from)
@@ -215,17 +263,9 @@ impl Database {
     pub fn find_project_by_name(&self, name: &str) -> Result<Option<ProjectRecord>, DbError> {
         self.with_conn(|conn| {
             conn.query_row(
-                "SELECT id, gitlab_path, name, workspace_path, enabled FROM projects WHERE name = ?1 OR gitlab_path = ?1",
+                &format!("{PROJECT_SELECT} WHERE name = ?1 OR gitlab_path = ?1"),
                 params![name],
-                |row| {
-                    Ok(ProjectRecord {
-                        id: row.get(0)?,
-                        gitlab_path: row.get(1)?,
-                        name: row.get(2)?,
-                        workspace_path: row.get(3)?,
-                        enabled: row.get::<_, i64>(4)? != 0,
-                    })
-                },
+                map_project_row,
             )
             .optional()
             .map_err(DbError::from)
@@ -314,23 +354,24 @@ impl Database {
                         name: row.get(2)?,
                         workspace_path: row.get(3)?,
                         enabled: row.get::<_, i64>(4)? != 0,
+                        signing_token: row.get(5)?,
                     },
                     TagRecord {
-                        id: row.get(5)?,
-                        project_id: row.get(6)?,
-                        name: row.get(7)?,
-                        hetzner_snapshot_id: row.get(8)?,
-                        server_type: row.get(9)?,
-                        hetzner_location: row.get(10)?,
-                        model: row.get(11)?,
-                        enabled: row.get::<_, i64>(12)? != 0,
+                        id: row.get(6)?,
+                        project_id: row.get(7)?,
+                        name: row.get(8)?,
+                        hetzner_snapshot_id: row.get(9)?,
+                        server_type: row.get(10)?,
+                        hetzner_location: row.get(11)?,
+                        model: row.get(12)?,
+                        enabled: row.get::<_, i64>(13)? != 0,
                     },
                 ))
             };
 
             if let Some(pid) = project_id {
                 let mut stmt = conn.prepare(
-                    "SELECT p.id, p.gitlab_path, p.name, p.workspace_path, p.enabled,
+                    "SELECT p.id, p.gitlab_path, p.name, p.workspace_path, p.enabled, p.signing_token,
                             t.id, t.project_id, t.name, t.hetzner_snapshot_id, t.server_type,
                             t.hetzner_location, t.model, t.enabled
                      FROM tags t JOIN projects p ON p.id = t.project_id
@@ -340,7 +381,7 @@ impl Database {
                 rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
             } else {
                 let mut stmt = conn.prepare(
-                    "SELECT p.id, p.gitlab_path, p.name, p.workspace_path, p.enabled,
+                    "SELECT p.id, p.gitlab_path, p.name, p.workspace_path, p.enabled, p.signing_token,
                             t.id, t.project_id, t.name, t.hetzner_snapshot_id, t.server_type,
                             t.hetzner_location, t.model, t.enabled
                      FROM tags t JOIN projects p ON p.id = t.project_id

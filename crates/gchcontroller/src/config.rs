@@ -6,12 +6,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use gch_core::db::{Database, Settings};
-use standardwebhooks::Webhook;
 use thiserror::Error;
 
 pub struct ControllerConfig {
     pub listen_addr: SocketAddr,
-    pub gitlab_webhook: Webhook,
     pub allowed_users: HashSet<String>,
     pub dedup_ttl_secs: u64,
     pub issue_dedup_ttl_secs: u64,
@@ -35,8 +33,6 @@ pub enum ConfigError {
     MissingVar(&'static str),
     #[error("invalid PORT value: {0}")]
     InvalidPort(String),
-    #[error("invalid GITLAB_WEBHOOK_SIGNING_TOKEN: expected whsec_... base64 key")]
-    InvalidSigningToken,
     #[error("invalid LISTEN_ADDR value: {0}")]
     InvalidListenAddr(String),
     #[error("database error: {0}")]
@@ -58,15 +54,6 @@ impl ControllerConfig {
                 SocketAddr::from(([0, 0, 0, 0], port))
             }
         };
-
-        let signing_token = env::var("GITLAB_WEBHOOK_SIGNING_TOKEN")
-            .map_err(|_| ConfigError::MissingVar("GITLAB_WEBHOOK_SIGNING_TOKEN"))?;
-        let signing_token = signing_token.trim();
-        if signing_token.is_empty() {
-            return Err(ConfigError::MissingVar("GITLAB_WEBHOOK_SIGNING_TOKEN"));
-        }
-        let gitlab_webhook =
-            Webhook::new(signing_token).map_err(|_| ConfigError::InvalidSigningToken)?;
 
         let allowed_users_raw = env::var("ALLOWED_USERS").unwrap_or_default();
         let allowed_users: HashSet<String> = allowed_users_raw
@@ -161,7 +148,6 @@ impl ControllerConfig {
         Ok((
             Self {
                 listen_addr,
-                gitlab_webhook,
                 allowed_users,
                 dedup_ttl_secs,
                 issue_dedup_ttl_secs,

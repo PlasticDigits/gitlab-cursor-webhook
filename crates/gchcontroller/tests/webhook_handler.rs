@@ -62,6 +62,8 @@ fn setup_db() -> Arc<Database> {
         "/home/agent/workspace",
     )
     .expect("project");
+    db.set_project_signing_token("group/example-project", TEST_SIGNING_TOKEN)
+        .expect("signing token");
     db.add_tag("example-project", "security", "snap-sec", None, None, None)
         .expect("tag");
     db.add_tag("example-project", "verify", "snap-verify", None, None, None)
@@ -93,7 +95,6 @@ fn test_config() -> Arc<ControllerConfig> {
     let root = repo_root();
     Arc::new(ControllerConfig {
         listen_addr: "127.0.0.1:0".parse().unwrap(),
-        gitlab_webhook: Webhook::new(TEST_SIGNING_TOKEN).unwrap(),
         allowed_users: ["plasticdigits", "brouie"]
             .into_iter()
             .map(str::to_string)

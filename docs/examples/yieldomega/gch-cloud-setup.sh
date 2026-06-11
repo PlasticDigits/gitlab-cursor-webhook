@@ -52,8 +52,9 @@ fi
 echo "==> Rust"
 sudo -u "${AGENT_USER}" bash -lc 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
 
-echo "==> Foundry (EVM)"
+echo "==> Foundry / Anvil (EVM)"
 sudo -u "${AGENT_USER}" bash -lc 'curl -L https://foundry.paradigm.xyz | bash && ~/.foundry/bin/foundryup'
+# Admin finalize agent configures Anvil (chain id, accounts, docker-compose) per project docs
 
 echo "==> Node + Playwright"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -

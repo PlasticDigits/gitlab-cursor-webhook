@@ -6,7 +6,8 @@ set -euo pipefail
 source /etc/gch/job.env
 export PATH="/home/agent/.local/bin:$PATH"
 
-# EVM local chain (optional — enable if agents need Anvil)
+# Local EVM chain — enable one option per project docs:
+# sudo -u agent bash -lc 'anvil --host 0.0.0.0 --port 8545 &'   # native Foundry Anvil
 # sudo -u agent docker compose -f /home/agent/workspace/docker-compose.anvil.yml up -d
 
 # Playwright / wallet tests can run after agent completes
