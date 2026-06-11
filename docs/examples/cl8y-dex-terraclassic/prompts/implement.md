@@ -19,7 +19,7 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 1. Fetch the issue title, description, and all comments:
 
    ```bash
-   glab issue view {{iid}} -R plasticdigits/{{project_name}} --comments
+   glab issue view {{iid}} --comments
    ```
 
    Treat them as acceptance criteria.
@@ -52,7 +52,6 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 ## GitLab / glab
 
 - Use `$GITLAB_TOKEN` from the environment for `glab`.
-- Use the **plasticdigits** account for glab — not the Cursor account.
 
 ## Cleanup
 

@@ -47,11 +47,11 @@ Do **not** report governance trust worries, speculative concerns, stylistic issu
 - Post **inline MR comments** on the exact diff lines for each current finding (severity, issue, impact).
 - **Always post one top-level MR comment** when the run finishes — even if there are zero findings. Include: commit/SHA reviewed, brief scope, outcome (`FINDINGS: n` medium+ or `NONE`), and pointers to inline threads.
 - If no medium+ findings: the top-level comment must still say so explicitly (e.g. `Security review: no medium+ findings on this diff.`).
-- **Do not use Slack.** All output goes on the MR (inline + top-level summary).
+- If there are **one or more** medium+ findings: add the GitLab label `block:security` to the MR (e.g. `glab mr update {{iid}} --label block:security`).
+- All output goes on the MR (inline + top-level summary).
 - Do not push changes or open fix MRs from this workflow.
 
 ## GitLab / glab
 
 - Use `$GITLAB_TOKEN` from the environment for `glab`.
-- Use the **plasticdigits** account for glab, commits, MR comments, and notes — not the Cursor account.
 - Do not mention co-authors, emails, or PII in commits.

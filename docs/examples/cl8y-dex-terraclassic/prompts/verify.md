@@ -19,7 +19,7 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 1. Fetch the issue title, description, and all comments:
 
    ```bash
-   glab issue view {{iid}} -R plasticdigits/{{project_name}} --comments
+   glab issue view {{iid}} --comments
    ```
 
    Treat them as acceptance criteria alongside relevant docs.
@@ -55,7 +55,6 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
 - Keplr wallet extension is installed in the browser profile — use as documented in project docs.
 - Use `$GITLAB_TOKEN` from the environment for `glab`.
-- Use the **plasticdigits** account for glab — not the Cursor account.
 
 ## Cleanup
 
