@@ -63,6 +63,14 @@ run_cursor_agent() {
   local prompt="$2"
   local model="$3"
 
+  if [[ -f /etc/gch/job.env ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source /etc/gch/job.env
+    set +a
+  fi
+  export GLAB_TOKEN="${GITLAB_TOKEN:-}"
+
   export CURSOR_API_KEY
   export DISPLAY="${DISPLAY:-:99}"
 

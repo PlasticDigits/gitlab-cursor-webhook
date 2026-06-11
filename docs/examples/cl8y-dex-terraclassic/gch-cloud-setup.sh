@@ -94,10 +94,26 @@ EOF
 chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.cursor"
 chmod 600 "${AGENT_HOME}/.cursor/cli-config.json"
 
-echo "==> Agent shell env"
+echo "==> GCH agent env (system + agent shell)"
+cat >/etc/profile.d/gch-agent.sh <<'EOF'
+# Playwright: no ubuntu26.04-x64 build yet; use 24.04 userspace on golden images.
+export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
+EOF
+chmod 644 /etc/profile.d/gch-agent.sh
+
 touch "${AGENT_HOME}/.bashrc"
-if ! grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "${AGENT_HOME}/.bashrc"; then
-  echo 'export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64' >>"${AGENT_HOME}/.bashrc"
+if ! grep -q 'GCH job secrets' "${AGENT_HOME}/.bashrc"; then
+  cat >>"${AGENT_HOME}/.bashrc" <<'EOF'
+
+# GCH job secrets (cloud-init writes /etc/gch/job.env per VM)
+if [[ -r /etc/gch/job.env ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source /etc/gch/job.env
+  set +a
+  export GLAB_TOKEN="${GITLAB_TOKEN:-}"
+fi
+EOF
 fi
 if ! grep -q '\.local/bin' "${AGENT_HOME}/.bashrc"; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >>"${AGENT_HOME}/.bashrc"

@@ -7,7 +7,7 @@ Create one golden snapshot per GitLab project (`yieldomega`, `cl8y-dex-terraclas
 | Setting | Value |
 |---------|-------|
 | Plan | **CPX32** (4 vCPU, 8 GB RAM, 160 GB NVMe) — shared vCPU, good price/perf for agents |
-| OS | Ubuntu 24.04 |
+| OS | **Ubuntu 24.04 only** (not 26.04 — Playwright and agent tooling are validated on 24.04) |
 | Location | `fsn1` (Falkenstein) — match snapshot and tag location |
 | Extra volume | None |
 
@@ -56,6 +56,17 @@ bash /tmp/gch-workspace/gch-cloud-setup.sh
 Optional: override the finalize model with `GCH_GOLDEN_IMAGE_MODEL=composer-2.5-fast`.
 
 After setup, review `/home/agent/.gch/golden-image-verify.log`.
+
+**Before snapshot, confirm baked image:**
+
+```bash
+grep "git_ref" /home/agent/gch-cloud-init-runner.sh    # jq -r '.git_ref // empty'
+test -f /etc/profile.d/gch-agent.sh
+grep job.env /home/agent/.bashrc
+grep PLAYWRIGHT /home/agent/workspace/scripts/setup-cloud-agent-localterra.sh || true
+```
+
+The project repo should include the latest `gch-cloud-init-runner.sh` (or `GCH_RUNNER_URL` pointing at `main` with the jq fix). `setup-cloud-agent-localterra.sh` must export `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` before `playwright install`.
 
 ### 3. Verify agent user
 
