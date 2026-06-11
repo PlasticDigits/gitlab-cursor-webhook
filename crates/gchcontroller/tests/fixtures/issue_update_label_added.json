@@ -1,0 +1,36 @@
+{
+  "object_kind": "issue",
+  "event_type": "issue",
+  "user": {
+    "username": "plasticdigits"
+  },
+  "project": {
+    "id": 100,
+    "name": "example-project",
+    "path_with_namespace": "group/example-project"
+  },
+  "labels": [
+    {
+      "id": 2,
+      "title": "agent:implement"
+    }
+  ],
+  "changes": {
+    "labels": {
+      "previous": [],
+      "current": [
+        {
+          "id": 2,
+          "title": "agent:implement"
+        }
+      ]
+    }
+  },
+  "object_attributes": {
+    "action": "update",
+    "iid": 5,
+    "title": "Implement feature X",
+    "description": "Build the MR for this issue",
+    "url": "https://gitlab.example/group/example-project/-/issues/5"
+  }
+}

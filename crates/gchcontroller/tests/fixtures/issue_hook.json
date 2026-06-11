@@ -1,0 +1,17 @@
+{
+  "object_kind": "issue",
+  "event_type": "issue",
+  "user": {
+    "username": "plasticdigits"
+  },
+  "project": {
+    "id": 100,
+    "name": "example-project",
+    "path_with_namespace": "group/example-project"
+  },
+  "object_attributes": {
+    "action": "open",
+    "iid": 3,
+    "title": "Bug report"
+  }
+}

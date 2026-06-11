@@ -1,0 +1,18 @@
+[package]
+name = "gchconfig"
+description = "CLI for GitLab Cloud Host configuration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gchconfig"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+dotenvy.workspace = true
+gch-core = { path = "../gch-core" }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

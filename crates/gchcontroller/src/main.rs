@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use gitlab_cursor_webhook::{config::Config, dedup::DedupCache, routes};
-use reqwest::Client;
+use gch_core::dedup::DedupCache;
+use gchcontroller::{config::ControllerConfig, jobs::JobStore, reaper, routes};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
@@ -14,24 +14,33 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "gitlab_cursor_webhook=info".into()),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| "gchcontroller=info".into()),
         )
         .init();
 
-    let config = match Config::from_env() {
-        Ok(c) => Arc::new(c),
+    let (config, db) = match ControllerConfig::from_env() {
+        Ok(pair) => pair,
         Err(e) => {
             eprintln!("configuration error: {e}");
             std::process::exit(1);
         }
     };
 
-    tracing::info!(listen_addr = %config.listen_addr, "starting gitlab-cursor-webhook");
+    let settings = config.settings.clone();
+    let config = Arc::new(config);
+    let db = Arc::new(db);
+    let jobs = JobStore::new();
+
+    std::fs::create_dir_all(&config.jobs_dir).ok();
+
+    reaper::spawn_reaper(jobs.clone(), settings);
+
+    tracing::info!(listen_addr = %config.listen_addr, "starting gchcontroller");
 
     let state = routes::AppState {
         config: config.clone(),
-        client: Client::new(),
+        db,
+        jobs,
         dedup: Arc::new(DedupCache::new(config.dedup_ttl_secs)),
         issue_dedup: Arc::new(DedupCache::new(config.issue_dedup_ttl_secs)),
     };
