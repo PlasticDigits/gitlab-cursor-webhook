@@ -1,4 +1,4 @@
-# Golden Image Runbook (Hetzner CX33)
+# Golden Image Runbook (Hetzner CPX32)
 
 Create one golden snapshot per GitLab project (`yieldomega`, `cl8y-dex-terraclassic`). Agent VMs are cloned from these snapshots on each job.
 
@@ -6,19 +6,19 @@ Create one golden snapshot per GitLab project (`yieldomega`, `cl8y-dex-terraclas
 
 | Setting | Value |
 |---------|-------|
-| Plan | **CX33** (4 vCPU, 8 GB RAM, 80 GB NVMe) |
+| Plan | **CPX32** (4 vCPU, 8 GB RAM, 160 GB NVMe) — shared vCPU, good price/perf for agents |
 | OS | Ubuntu 24.04 |
-| Location | `nbg1` (or your preferred Hetzner location) |
+| Location | `fsn1` (Falkenstein) — match snapshot and tag location |
 | Extra volume | None |
 
-Approximate cost: **€5.49/mo** cap if left running; snapshots incur small storage fees.
+Approximate cost: billed per hour while the VM runs; snapshots incur small storage fees.
 
 ## Steps
 
 ### 1. Create builder VM
 
 1. Hetzner Cloud Console → **Add Server**
-2. Ubuntu 24.04, CX33, your SSH key
+2. Ubuntu 24.04, CPX32, location Falkenstein (`fsn1`), your SSH key
 3. SSH in as root
 
 ### 2. Clone project and run setup
@@ -99,6 +99,16 @@ On the controller host, follow the project runbook:
 - yieldomega — same pattern; prompts under `docs/examples/yieldomega/prompts/`
 
 Typically one snapshot ID serves all three tags (`security`, `verify`, `implement`).
+
+### VM placement fallbacks
+
+`gchcontroller` tries these Hetzner type/location pairs in order until one succeeds:
+
+1. `cx33` — `nbg1`, `fsn1`, `hel1`
+2. `cpx32` — `nbg1`, `fsn1`, `hel1`
+3. `cpx41` — `hil` (Hillsboro, US last resort)
+
+Tag `server_type` / `location` in `gchconfig` are defaults for display; provisioning uses the fallback chain above. The snapshot must exist in the location that succeeds (rebuild golden image in `fsn1` if needed).
 
 ## Firewall (one-time)
 

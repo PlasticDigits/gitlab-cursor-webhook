@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Golden-image setup for plasticdigits/cl8y-dex-terraclassic (Terra Classic)
-# Run as root on a fresh Ubuntu 24.04 CX33 before snapshotting.
+# Run as root on a fresh Ubuntu 24.04 CPX32 (fsn1) before snapshotting.
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive

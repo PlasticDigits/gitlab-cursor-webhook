@@ -120,9 +120,9 @@ enum TagCommands {
         name: String,
         #[arg(long)]
         snapshot: String,
-        #[arg(long, default_value = "cx33")]
+        #[arg(long, default_value = "cpx32")]
         server_type: String,
-        #[arg(long, default_value = "nbg1")]
+        #[arg(long, default_value = "fsn1")]
         location: String,
         #[arg(long, default_value = "composer-2.5")]
         model: String,

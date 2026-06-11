@@ -13,7 +13,7 @@ variable "job_id" {
 
 variable "server_type" {
   type    = string
-  default = "cx33"
+  default = "cpx32"
 }
 
 variable "snapshot_id" {
@@ -22,7 +22,7 @@ variable "snapshot_id" {
 
 variable "location" {
   type    = string
-  default = "nbg1"
+  default = "fsn1"
 }
 
 variable "firewall_id" {

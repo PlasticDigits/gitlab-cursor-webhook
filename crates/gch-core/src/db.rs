@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS tags (
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     hetzner_snapshot_id TEXT NOT NULL,
-    server_type TEXT NOT NULL DEFAULT 'cx33',
-    hetzner_location TEXT NOT NULL DEFAULT 'nbg1',
+    server_type TEXT NOT NULL DEFAULT 'cpx32',
+    hetzner_location TEXT NOT NULL DEFAULT 'fsn1',
     model TEXT NOT NULL DEFAULT 'composer-2.5',
     enabled INTEGER NOT NULL DEFAULT 1,
     UNIQUE(project_id, name)
@@ -298,8 +298,8 @@ impl Database {
                     project.id,
                     tag_name,
                     snapshot_id,
-                    server_type.unwrap_or("cx33"),
-                    location.unwrap_or("nbg1"),
+                    server_type.unwrap_or("cpx32"),
+                    location.unwrap_or("fsn1"),
                     model.unwrap_or("composer-2.5"),
                 ],
             )?;

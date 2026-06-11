@@ -28,6 +28,7 @@ pub enum ProvisionError {
     MaxConcurrentJobs,
 }
 
+#[derive(Clone)]
 pub struct ProvisionRequest {
     pub project_gitlab_path: String,
     pub tag: WebhookTag,
@@ -36,6 +37,26 @@ pub struct ProvisionRequest {
     pub prompt: String,
     pub resolved: ResolvedTag,
     pub git_ref: Option<String>,
+}
+
+/// Hetzner server type + location attempts when placement fails (sold out, etc.).
+const PLACEMENT_FALLBACKS: &[(&str, &str)] = &[
+    ("cx33", "nbg1"),
+    ("cx33", "fsn1"),
+    ("cx33", "hel1"),
+    ("cpx32", "nbg1"),
+    ("cpx32", "fsn1"),
+    ("cpx32", "hel1"),
+    ("cpx41", "hil"),
+];
+
+struct TerraformWorkspace<'a> {
+    module_dir: &'a Path,
+    job_id: &'a Uuid,
+    req: &'a ProvisionRequest,
+    cloud_init: &'a str,
+    firewall_id: &'a str,
+    ssh_key_ids: &'a [String],
 }
 
 pub async fn provision_job(
@@ -72,27 +93,19 @@ pub async fn provision_job(
         },
     )?;
 
-    write_terraform_workspace(
-        &terraform_dir,
-        &config.terraform_module_dir,
-        &job_id,
-        &req,
-        &cloud_init,
-        &config.firewall_id,
-        &config.ssh_key_ids,
-    )?;
+    let provision_req = req.clone();
 
     let job = JobRecord {
         job_id,
         token_hash,
-        project_gitlab_path: req.project_gitlab_path.clone(),
-        tag: req.tag,
-        iid: req.iid,
-        object_kind: req.object_kind,
-        prompt: req.prompt,
-        model: req.resolved.tag.model.clone(),
-        workspace_path: req.resolved.project.workspace_path.clone(),
-        git_ref: req.git_ref,
+        project_gitlab_path: provision_req.project_gitlab_path.clone(),
+        tag: provision_req.tag,
+        iid: provision_req.iid,
+        object_kind: provision_req.object_kind.clone(),
+        prompt: provision_req.prompt.clone(),
+        model: provision_req.resolved.tag.model.clone(),
+        workspace_path: provision_req.resolved.project.workspace_path.clone(),
+        git_ref: provision_req.git_ref.clone(),
         status: JobStatus::Provisioning,
         phase: Some("terraform_apply".to_string()),
         status_message: None,
@@ -108,13 +121,29 @@ pub async fn provision_job(
         // Return before terraform finishes — GitLab webhook delivery times out (~10s).
         let jobs = Arc::clone(jobs);
         let terraform_dir = terraform_dir.clone();
+        let module_dir = config.terraform_module_dir.clone();
+        let firewall_id = config.firewall_id.clone();
+        let ssh_key_ids = config.ssh_key_ids.clone();
         tokio::spawn(async move {
-            match run_terraform(&terraform_dir, "apply", true).await {
-                Ok(()) => {
-                    info!(%job_id, "terraform apply succeeded");
+            let workspace = TerraformWorkspace {
+                module_dir: &module_dir,
+                job_id: &job_id,
+                req: &provision_req,
+                cloud_init: &cloud_init,
+                firewall_id: &firewall_id,
+                ssh_key_ids: &ssh_key_ids,
+            };
+            match apply_with_placement_fallbacks(&terraform_dir, &workspace).await {
+                Ok((server_type, location)) => {
+                    info!(
+                        %job_id,
+                        %server_type,
+                        %location,
+                        "terraform apply succeeded"
+                    );
                 }
                 Err(e) => {
-                    error!(%job_id, error = %e, "terraform apply failed");
+                    error!(%job_id, error = %e, "terraform apply failed after all placement fallbacks");
                     jobs.remove(job_id).await;
                     let _ = destroy_workspace(&terraform_dir).await;
                 }
@@ -143,6 +172,42 @@ pub async fn destroy_job(
     jobs.remove(job_id).await;
     info!(%job_id, "job destroyed and removed from memory");
     Ok(())
+}
+
+async fn apply_with_placement_fallbacks(
+    terraform_dir: &Path,
+    workspace: &TerraformWorkspace<'_>,
+) -> Result<(&'static str, &'static str), ProvisionError> {
+    let mut last_err: Option<ProvisionError> = None;
+    let mut initialized = false;
+
+    for (server_type, location) in PLACEMENT_FALLBACKS {
+        write_terraform_workspace(terraform_dir, workspace, server_type, location)?;
+
+        if !initialized {
+            run_terraform(terraform_dir, "init", false).await?;
+            initialized = true;
+        }
+
+        match run_terraform(terraform_dir, "apply", true).await {
+            Ok(()) => return Ok((server_type, location)),
+            Err(e) => {
+                warn!(
+                    job_id = %workspace.job_id,
+                    %server_type,
+                    %location,
+                    error = %e,
+                    "placement failed, trying next fallback"
+                );
+                last_err = Some(e);
+                let _ = run_terraform(terraform_dir, "destroy", true).await;
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| {
+        ProvisionError::Terraform("no placement fallbacks configured".to_string())
+    }))
 }
 
 async fn destroy_workspace(terraform_dir: &Path) -> Result<(), ProvisionError> {
@@ -199,21 +264,20 @@ async fn run_terraform(
 
 fn write_terraform_workspace(
     dir: &Path,
-    module_dir: &Path,
-    job_id: &Uuid,
-    req: &ProvisionRequest,
-    cloud_init: &str,
-    firewall_id: &str,
-    ssh_key_ids: &[String],
+    workspace: &TerraformWorkspace<'_>,
+    server_type: &str,
+    location: &str,
 ) -> Result<(), std::io::Error> {
-    let module_abs = fs::canonicalize(module_dir).unwrap_or_else(|_| module_dir.to_path_buf());
+    let module_abs =
+        fs::canonicalize(workspace.module_dir).unwrap_or_else(|_| workspace.module_dir.to_path_buf());
 
-    let ssh_keys = if ssh_key_ids.is_empty() {
+    let ssh_keys = if workspace.ssh_key_ids.is_empty() {
         "[]".to_string()
     } else {
         format!(
             "[{}]",
-            ssh_key_ids
+            workspace
+                .ssh_key_ids
                 .iter()
                 .map(|id| format!("\"{id}\""))
                 .collect::<Vec<_>>()
@@ -257,23 +321,23 @@ EOT
 }}
 "#,
         module_abs = module_abs.display(),
-        job_id = job_id,
-        server_type = req.resolved.tag.server_type,
-        snapshot_id = req.resolved.tag.hetzner_snapshot_id,
-        location = req.resolved.tag.hetzner_location,
-        firewall_id = firewall_id,
+        job_id = workspace.job_id,
+        server_type = server_type,
+        snapshot_id = workspace.req.resolved.tag.hetzner_snapshot_id,
+        location = location,
+        firewall_id = workspace.firewall_id,
         ssh_keys = ssh_keys,
-        cloud_init = cloud_init,
-        tag = req.tag,
-        project = req.project_gitlab_path,
-        iid = req.iid,
+        cloud_init = workspace.cloud_init,
+        tag = workspace.req.tag,
+        project = workspace.req.project_gitlab_path,
+        iid = workspace.req.iid,
         created_at = created_at,
     );
 
     fs::write(dir.join("main.tf"), main_tf)?;
 
     // Also write cloud-init as file for debugging
-    fs::write(dir.join("cloud_init.yaml"), cloud_init)?;
+    fs::write(dir.join("cloud_init.yaml"), workspace.cloud_init)?;
 
     Ok(())
 }
