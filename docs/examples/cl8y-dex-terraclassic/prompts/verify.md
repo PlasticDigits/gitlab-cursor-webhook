@@ -59,3 +59,5 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 ## Cleanup
 
 When complete, remove any `agent:implement` or `agent:verify` labels from the issue.
+
+Do **not** run shell commands in the background. After `glab issue close` / `glab issue note` and label cleanup, stop — do not start new tools or installs.
