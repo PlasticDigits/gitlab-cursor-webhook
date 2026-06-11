@@ -89,6 +89,10 @@ Dedup: MR by `project_id:iid:commit_sha`; issues by `project_id:iid` (shared acr
 
 See [docs/admin-golden-image.md](docs/admin-golden-image.md).
 
+Project runbooks (controller + webhook + `gchconfig`):
+
+- [docs/runbook-cl8y-dex-terraclassic.md](docs/runbook-cl8y-dex-terraclassic.md)
+
 Example project scripts:
 
 - [docs/examples/yieldomega/](docs/examples/yieldomega/) — EVM / Foundry / Rabby

@@ -93,18 +93,12 @@ truncate -s 0 /root/.bash_history /home/agent/.bash_history
 
 ### 6. Register in gchconfig
 
-On the controller host:
+On the controller host, follow the project runbook:
 
-```bash
-gchconfig project add --gitlab plasticdigits/yieldomega --workspace /home/agent/workspace
-gchconfig tag add --project yieldomega --name security --snapshot <SNAPSHOT_ID>
-gchconfig tag add --project yieldomega --name verify --snapshot <SNAPSHOT_ID>
-gchconfig tag add --project yieldomega --name implement --snapshot <SNAPSHOT_ID>
-gchconfig prompt set --project yieldomega --tag security --file prompts/security.md
-gchconfig doctor
-```
+- [runbook-cl8y-dex-terraclassic.md](runbook-cl8y-dex-terraclassic.md) — Terra Classic (full `gchconfig` + webhook steps)
+- yieldomega — same pattern; prompts under `docs/examples/yieldomega/prompts/`
 
-Repeat tags if you use separate snapshots per tag; typically one snapshot serves all three tags.
+Typically one snapshot ID serves all three tags (`security`, `verify`, `implement`).
 
 ## Firewall (one-time)
 
