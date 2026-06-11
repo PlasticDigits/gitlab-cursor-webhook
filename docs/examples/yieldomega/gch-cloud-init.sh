@@ -4,7 +4,7 @@
 set -euo pipefail
 
 source /etc/gch/job.env
-export PATH="/home/agent/.cursor/bin:$PATH"
+export PATH="/home/agent/.local/bin:$PATH"
 
 # EVM local chain (optional — enable if agents need Anvil)
 # sudo -u agent docker compose -f /home/agent/workspace/docker-compose.anvil.yml up -d

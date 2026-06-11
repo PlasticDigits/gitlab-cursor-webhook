@@ -23,21 +23,39 @@ Approximate cost: **€5.49/mo** cap if left running; snapshots incur small stor
 
 ### 2. Clone project and run setup
 
+`/home/agent` does not exist on a fresh builder VM until setup creates the `agent` user. Clone to a staging directory first, run setup from the project repo, then move it into place.
+
+Clone over HTTPS (no GitLab SSH key needed on the builder VM). Setup requires `CURSOR_API_KEY` — it runs a finalize agent (`composer-2.5` by default) to install wallet extensions, configure LocalTerra/Foundry, and verify the toolchain.
+
 ```bash
-git clone git@gitlab.com:plasticdigits/<project>.git /home/agent/workspace
-# Copy gch-cloud-setup.sh from the project repo into workspace root, then:
-chmod +x /home/agent/workspace/gch-cloud-setup.sh
-bash /home/agent/workspace/gch-cloud-setup.sh
+git clone https://gitlab.com/plasticdigits/<project> /tmp/gch-workspace
+chmod +x /tmp/gch-workspace/gch-cloud-setup.sh
+export CURSOR_API_KEY='your-cursor-api-key'
+bash /tmp/gch-workspace/gch-cloud-setup.sh
+rm -rf /tmp/gch-workspace   # optional; repo is copied to /home/agent/workspace
 ```
 
-See [docs/examples/](examples/) for project-specific setup scripts to copy into each repo.
+Example for Terra Classic:
+
+```bash
+git clone https://gitlab.com/plasticdigits/cl8y-dex-terraclassic /tmp/gch-workspace
+chmod +x /tmp/gch-workspace/gch-cloud-setup.sh
+export CURSOR_API_KEY='your-cursor-api-key'
+bash /tmp/gch-workspace/gch-cloud-setup.sh
+```
+
+Optional: override the finalize model with `GCH_GOLDEN_IMAGE_MODEL=composer-2.5-fast`.
+
+After setup, review `/home/agent/.gch/golden-image-verify.log`.
 
 ### 3. Verify agent user
 
 ```bash
 id agent
-sudo -u agent agent about   # Cursor CLI
+agent about                            # Cursor CLI (symlinked to /usr/local/bin by setup)
 sudo -u agent docker ps
+cat /home/agent/.cursor/cli-config.json   # attribution off, approvalMode unrestricted
+cat /home/agent/.gch/golden-image-verify.log
 ```
 
 The `agent` user must have:

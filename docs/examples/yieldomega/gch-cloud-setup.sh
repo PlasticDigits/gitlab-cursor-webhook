@@ -7,18 +7,31 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 WORKSPACE="${WORKSPACE:-/home/agent/workspace}"
 AGENT_USER="${AGENT_USER:-agent}"
-GCH_RUNNER_URL="${GCH_RUNNER_URL:-https://raw.githubusercontent.com/plasticdigits/gitlab-cursor-webhook/main/scripts/gch-cloud-init-runner.sh}"
+GCH_RUNNER_URL="${GCH_RUNNER_URL:-https://gitlab.com/plasticdigits/gitlab-cursor-webhook/-/raw/main/scripts/gch-cloud-init-runner.sh}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENT_HOME="/home/${AGENT_USER}"
+GCH_GOLDEN_IMAGE_MODEL="${GCH_GOLDEN_IMAGE_MODEL:-composer-2.5}"
+FINALIZE_PROMPT="${SCRIPT_DIR}/gch-golden-image-finalize.md"
 
 echo "==> Base packages"
 apt-get update
+apt-get upgrade -y
 apt-get install -y \
   build-essential git curl jq sqlite3 postgresql postgresql-contrib \
-  docker.io xvfb chromium-browser unzip ca-certificates
+  docker.io xvfb chromium-browser unzip ca-certificates \
+  libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+  libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+  libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libatspi2.0-0 fonts-liberation
 
 echo "==> Agent user"
 if ! id "${AGENT_USER}" &>/dev/null; then
-  useradd -m -s /bin/bash "${AGENT_USER}"
+  useradd -m -s /bin/bash "${AGENT_USER}" 2>/dev/null || useradd -s /bin/bash "${AGENT_USER}"
 fi
+mkdir -p "${AGENT_HOME}"
+if [[ ! -f "${AGENT_HOME}/.bashrc" ]]; then
+  cp -a /etc/skel/. "${AGENT_HOME}/"
+fi
+chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}"
 passwd -l "${AGENT_USER}"
 echo "${AGENT_USER} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/"${AGENT_USER}"
 chmod 440 /etc/sudoers.d/"${AGENT_USER}"
@@ -45,27 +58,105 @@ sudo -u "${AGENT_USER}" bash -lc 'curl -L https://foundry.paradigm.xyz | bash &&
 echo "==> Node + Playwright"
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
-sudo -u "${AGENT_USER}" bash -lc 'cd ~ && npm init -y && npx playwright install chromium --with-deps'
-
+sudo -u "${AGENT_USER}" bash -lc '
+  export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
+  mkdir -p ~/.gch/playwright
+  cd ~/.gch/playwright
+  npm init -y
+  npm install @playwright/test
+  npx playwright install chromium
+'
 echo "==> glab"
-curl -fsSL https://gitlab.com/gitlab-org/cli/-/releases/v1.58.0/downloads/glab_1.58.0_linux_amd64.deb -o /tmp/glab.deb
+GLAB_VERSION="${GLAB_VERSION:-1.102.0}"
+curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_amd64.deb" \
+  -o /tmp/glab.deb
 dpkg -i /tmp/glab.deb || apt-get install -f -y
 
 echo "==> Cursor CLI"
 sudo -u "${AGENT_USER}" bash -lc 'curl https://cursor.com/install -fsS | bash'
-echo 'export PATH="$HOME/.cursor/bin:$PATH"' >>"/home/${AGENT_USER}/.bashrc"
+if [[ ! -x "${AGENT_HOME}/.local/bin/agent" ]]; then
+  echo "ERROR: Cursor CLI not found at ${AGENT_HOME}/.local/bin/agent" >&2
+  exit 1
+fi
+ln -sf "${AGENT_HOME}/.local/bin/agent" /usr/local/bin/agent
 
-echo "==> Browser profile + Rabby (EVM wallet)"
-sudo -u "${AGENT_USER}" mkdir -p "/home/${AGENT_USER}/.gch/browser-profile"
-# Admin: download Rabby unpacked extension into /home/agent/.gch/extensions/rabby
+echo "==> Cursor CLI config"
+mkdir -p "${AGENT_HOME}/.cursor"
+cat >"${AGENT_HOME}/.cursor/cli-config.json" <<'EOF'
+{
+  "version": 1,
+  "editor": { "vimMode": false },
+  "permissions": { "allow": [], "deny": [] },
+  "approvalMode": "unrestricted",
+  "attribution": {
+    "attributeCommitsToAgent": false,
+    "attributePRsToAgent": false
+  }
+}
+EOF
+chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.cursor"
+chmod 600 "${AGENT_HOME}/.cursor/cli-config.json"
+
+echo "==> Agent shell env"
+touch "${AGENT_HOME}/.bashrc"
+if ! grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "${AGENT_HOME}/.bashrc"; then
+  echo 'export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64' >>"${AGENT_HOME}/.bashrc"
+fi
+if ! grep -q '\.local/bin' "${AGENT_HOME}/.bashrc"; then
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >>"${AGENT_HOME}/.bashrc"
+fi
+chown "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.bashrc"
+
+echo "==> GCH agent directories"
+sudo -u "${AGENT_USER}" mkdir -p \
+  "${AGENT_HOME}/.gch/browser-profile" \
+  "${AGENT_HOME}/.gch/extensions"
 
 echo "==> Shared cloud-init runner"
-curl -fsSL "${GCH_RUNNER_URL}" -o "/home/${AGENT_USER}/gch-cloud-init-runner.sh"
-chmod +x "/home/${AGENT_USER}/gch-cloud-init-runner.sh"
-chown "${AGENT_USER}:${AGENT_USER}" "/home/${AGENT_USER}/gch-cloud-init-runner.sh"
+RUNNER_DST="${AGENT_HOME}/gch-cloud-init-runner.sh"
+if [[ -f "${SCRIPT_DIR}/gch-cloud-init-runner.sh" ]]; then
+  install -m 755 -o "${AGENT_USER}" -g "${AGENT_USER}" \
+    "${SCRIPT_DIR}/gch-cloud-init-runner.sh" "${RUNNER_DST}"
+elif curl -fsSL "${GCH_RUNNER_URL}" -o "${RUNNER_DST}"; then
+  chown "${AGENT_USER}:${AGENT_USER}" "${RUNNER_DST}"
+  chmod 755 "${RUNNER_DST}"
+else
+  echo "ERROR: add gch-cloud-init-runner.sh next to gch-cloud-setup.sh in the project repo." >&2
+  exit 1
+fi
 
 echo "==> Workspace"
 mkdir -p "${WORKSPACE}"
+if [[ -d "${SCRIPT_DIR}/.git" ]]; then
+  rsync -a "${SCRIPT_DIR}/" "${WORKSPACE}/"
+fi
 chown -R "${AGENT_USER}:${AGENT_USER}" "${WORKSPACE}"
 
-echo "Setup complete. Clone repo into ${WORKSPACE}, install Rabby extension, then run pre-snapshot cleanup."
+echo "==> Golden image finalize (Cursor agent)"
+if [[ ! -f "${FINALIZE_PROMPT}" ]]; then
+  echo "ERROR: missing ${FINALIZE_PROMPT} in the project repo." >&2
+  exit 1
+fi
+if [[ -z "${CURSOR_API_KEY:-}" ]]; then
+  echo "ERROR: export CURSOR_API_KEY before running setup (needed for golden-image finalize agent)." >&2
+  exit 1
+fi
+if ! pgrep -x Xvfb >/dev/null 2>&1; then
+  Xvfb :99 -screen 0 1920x1080x24 &
+  sleep 1
+fi
+sudo -u "${AGENT_USER}" env \
+  CURSOR_API_KEY="${CURSOR_API_KEY}" \
+  DISPLAY=:99 \
+  PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 \
+  bash -lc "
+    set -euo pipefail
+    cd '${WORKSPACE}'
+    agent -p \"\$(cat '${FINALIZE_PROMPT}')\" \
+      --model '${GCH_GOLDEN_IMAGE_MODEL}' \
+      --force --trust \
+      --workspace '${WORKSPACE}' \
+      --output-format text
+  "
+
+echo "Setup complete. Review ${AGENT_HOME}/.gch/golden-image-verify.log, then run pre-snapshot cleanup."
