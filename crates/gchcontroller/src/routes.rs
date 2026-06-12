@@ -18,8 +18,8 @@ use gch_core::{
     job_api::{JobListResponse, JobSummary},
     server_ipv4_from_tfstate,
     filter::{
-        select_issue_tag, should_forward, should_forward_issue, GitLabIssueWebhook,
-        GitLabMrWebhook, SkipReason, WebhookEnvelope,
+        select_issue_tag, should_forward, should_forward_issue, should_forward_mr_labels,
+        GitLabIssueWebhook, GitLabMrWebhook, SkipReason, WebhookEnvelope,
     },
     prompt::{render_prompt, PromptContext},
     tag::MR_SECURITY_TAG,
@@ -226,6 +226,19 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
     let iid = payload.object_attributes.iid;
     let username = payload.user.username.clone();
 
+    match should_forward_mr_labels(&payload, &state.config.allowed_users) {
+        Ok(tags) => {
+            if let Some(tag) = select_issue_tag(&tags) {
+                return handle_mr_labeled_agent(state, payload, tag, &action, iid, &username).await;
+            }
+        }
+        Err(SkipReason::LabelNotTriggered) | Err(SkipReason::LabelReserved { .. }) => {}
+        Err(reason) => {
+            log_skip(&action, iid, &username, None, &reason);
+            return ok_response(json!({ "status": "skipped" }));
+        }
+    }
+
     if let Err(reason) = should_forward(&payload, &state.config.allowed_users) {
         log_skip(&action, iid, &username, None, &reason);
         return ok_response(json!({ "status": "skipped" }));
@@ -273,6 +286,63 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
         iid,
         &username,
         None,
+    )
+    .await
+}
+
+async fn handle_mr_labeled_agent(
+    state: &AppState,
+    payload: GitLabMrWebhook,
+    tag: String,
+    action: &str,
+    iid: u64,
+    username: &str,
+) -> Response {
+    let Some(resolved) = state
+        .db
+        .resolve_tag(&payload.project, &tag)
+        .ok()
+        .flatten()
+    else {
+        log_skip(
+            action,
+            iid,
+            username,
+            Some(&tag),
+            &SkipReason::ProjectNotConfigured,
+        );
+        return ok_response(json!({ "status": "skipped" }));
+    };
+
+    let dedup_key = issue_key(&payload.project, iid, &tag);
+    if state.issue_dedup.is_duplicate(&dedup_key) {
+        log_skip(action, iid, username, Some(&tag), &SkipReason::Duplicate);
+        return ok_response(json!({ "status": "skipped" }));
+    }
+
+    let ctx = mr_prompt_context(&payload);
+    let prompt = render_prompt(&resolved.prompt_template, &ctx);
+    let git_ref = payload
+        .object_attributes
+        .last_commit
+        .as_ref()
+        .map(|c| c.id.clone());
+
+    provision_result(
+        state,
+        ProvisionRequest {
+            project_gitlab_path: resolved.project.gitlab_path.clone(),
+            tag: tag.clone(),
+            iid,
+            object_kind: "merge_request".to_string(),
+            prompt,
+            resolved,
+            git_ref,
+        },
+        action,
+        iid,
+        username,
+        Some(&tag),
     )
     .await
 }

@@ -80,9 +80,10 @@ gchconfig dry-run --fixture tests/fixtures/mr_open.json
 
 ## Filter behavior
 
-### Merge requests → tag `security`
+### Merge requests
 
-Forwards when: `open`, or `update` with new commits (`oldrev` set); user in `ALLOWED_USERS`; project configured.
+- **`security`** (default): forwards on `open`, or `update` with new commits (`oldrev` set); user in `ALLOWED_USERS`; project configured.
+- **Other tags** (e.g. `fix_conflicts`, `fix_security`): forwards when an `agent:{tag}` label is on the MR at open, or newly added on `update` — same label rules as issues. Deduped per `project_id:iid:tag` (issue dedup TTL).
 
 ### Issues → any configured tag via `agent:{tag}` label
 

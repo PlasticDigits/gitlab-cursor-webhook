@@ -392,6 +392,19 @@ fn run_dry_run(
     match envelope.object_kind.as_str() {
         "merge_request" => {
             let payload: gch_core::GitLabMrWebhook = serde_json::from_str(&body)?;
+            if let Ok(tags) = gch_core::should_forward_mr_labels(&payload, &allowed) {
+                if let Some(tag) = gch_core::select_issue_tag(&tags) {
+                    let resolved = db.resolve_tag(&payload.project, &tag)?;
+                    let Some(resolved) = resolved else {
+                        println!("result=skipped reason=project_not_configured");
+                        return Ok(());
+                    };
+                    let ctx = mr_prompt_context(&payload);
+                    let prompt = render_prompt(&resolved.prompt_template, &ctx);
+                    print_resolution(&resolved.project.gitlab_path, &tag, &prompt);
+                    return Ok(());
+                }
+            }
             should_forward(&payload, &allowed).map_err(|r| format!("filter: {}", r.as_str()))?;
             let tag = MR_SECURITY_TAG;
             let resolved = db.resolve_tag(&payload.project, tag)?;

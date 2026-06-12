@@ -75,6 +75,8 @@ mod tests {
                 name: "p".to_string(),
                 path_with_namespace: None,
             },
+            labels: Vec::new(),
+            changes: None,
             object_attributes: ObjectAttributes {
                 action: "open".to_string(),
                 oldrev: None,

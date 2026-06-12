@@ -17,6 +17,10 @@ pub struct GitLabMrWebhook {
     pub object_kind: String,
     pub user: User,
     pub project: Project,
+    #[serde(default)]
+    pub labels: Vec<Label>,
+    #[serde(default)]
+    pub changes: Option<MrChanges>,
     pub object_attributes: ObjectAttributes,
 }
 
@@ -77,6 +81,12 @@ pub struct LabelChange {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct IssueChanges {
+    #[serde(default)]
+    pub labels: Option<LabelChange>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
+pub struct MrChanges {
     #[serde(default)]
     pub labels: Option<LabelChange>,
 }
@@ -192,6 +202,68 @@ pub fn should_forward(
     Ok(())
 }
 
+/// Returns MR tag names from `agent:{tag}` labels (e.g. `agent:fix_conflicts`).
+///
+/// Forwards on `open` when the label is present, or on `update` when the label was just added.
+/// Reserved tags (e.g. `agent:security`) are ignored — use the default MR security flow instead.
+pub fn should_forward_mr_labels(
+    payload: &GitLabMrWebhook,
+    allowed_users: &HashSet<String>,
+) -> Result<Vec<String>, SkipReason> {
+    if payload.object_kind != "merge_request" {
+        return Err(SkipReason::UnsupportedObjectKind);
+    }
+
+    if !allowed_users.contains(&payload.user.username) {
+        return Err(SkipReason::UserNotAllowed {
+            username: payload.user.username.clone(),
+        });
+    }
+
+    let (mut tags, saw_reserved) = match payload.object_attributes.action.as_str() {
+        "open" => collect_triggered_agent_labels(&payload.labels),
+        "update" => {
+            if let Some(label_change) = payload
+                .changes
+                .as_ref()
+                .and_then(|changes| changes.labels.as_ref())
+            {
+                let added: Vec<Label> = label_change
+                    .current
+                    .iter()
+                    .filter(|label| {
+                        label.title.starts_with(LABEL_AGENT_PREFIX)
+                            && label_newly_added(
+                                &label_change.previous,
+                                &label_change.current,
+                                &label.title,
+                            )
+                    })
+                    .cloned()
+                    .collect();
+                collect_triggered_agent_labels(&added)
+            } else {
+                (Vec::new(), false)
+            }
+        }
+        _ => (Vec::new(), false),
+    };
+
+    tags.sort();
+    tags.dedup();
+
+    if tags.is_empty() {
+        if saw_reserved {
+            return Err(SkipReason::LabelReserved {
+                tag: crate::tag::MR_SECURITY_TAG.to_string(),
+            });
+        }
+        return Err(SkipReason::LabelNotTriggered);
+    }
+
+    Ok(tags)
+}
+
 /// Returns issue tag names that should receive a Cursor webhook.
 ///
 /// Forwards when an `agent:{tag}` label is present on a newly opened issue,
@@ -282,6 +354,8 @@ mod tests {
                 name: "test-project".to_string(),
                 path_with_namespace: Some("group/test-project".to_string()),
             },
+            labels: Vec::new(),
+            changes: None,
             object_attributes: ObjectAttributes {
                 action: action.to_string(),
                 oldrev: None,
@@ -513,5 +587,37 @@ mod tests {
                 username: "stranger".to_string()
             }
         );
+    }
+
+    #[test]
+    fn mr_open_with_fix_conflicts_label_forwards() {
+        let mut payload = base_payload("open");
+        payload.labels = vec![agent_label("fix_conflicts")];
+        assert_eq!(
+            should_forward_mr_labels(&payload, &allowlist()).unwrap(),
+            vec!["fix_conflicts".to_string()]
+        );
+    }
+
+    #[test]
+    fn mr_update_with_fix_conflicts_label_added_forwards() {
+        let mut payload = base_payload("update");
+        payload.changes = Some(MrChanges {
+            labels: Some(LabelChange {
+                previous: vec![],
+                current: vec![agent_label("fix_conflicts")],
+            }),
+        });
+        assert_eq!(
+            should_forward_mr_labels(&payload, &allowlist()).unwrap(),
+            vec!["fix_conflicts".to_string()]
+        );
+    }
+
+    #[test]
+    fn mr_open_without_agent_labels_skips() {
+        let payload = base_payload("open");
+        let err = should_forward_mr_labels(&payload, &allowlist()).unwrap_err();
+        assert_eq!(err, SkipReason::LabelNotTriggered);
     }
 }

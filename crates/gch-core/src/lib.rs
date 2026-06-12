@@ -10,8 +10,9 @@ pub mod tag;
 pub use db::{Database, ProjectRecord, PromptRecord, Settings, TagRecord};
 pub use dedup::{commit_key, issue_key, DedupCache};
 pub use filter::{
-    select_issue_tag, should_forward, should_forward_issue, GitLabIssueWebhook, GitLabMrWebhook,
-    Label, LastCommit, Project, SkipReason, User, WebhookEnvelope,
+    select_issue_tag, should_forward, should_forward_issue, should_forward_mr_labels,
+    GitLabIssueWebhook, GitLabMrWebhook, Label, LastCommit, Project, SkipReason, User,
+    WebhookEnvelope,
 };
 pub use job_api::{
     list_disk_workspaces, parse_disk_workspace, server_ipv4_from_tfstate, DiskJobWorkspace,
