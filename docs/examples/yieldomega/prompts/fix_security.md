@@ -6,7 +6,7 @@ Fix security issues for merge request **!{{iid}}**: {{title}}
 
 ## Goal
 
-Fix all **medium+** security findings on this MR from prior review comments (inline and top-level). Push fixes to the source branch. Do **not** merge the MR.
+Fix all **low+** security findings on this MR from prior review comments (inline and top-level). Push fixes to the source branch. Do **not** merge the MR.
 
 ## Workflow
 
@@ -16,11 +16,11 @@ Fix all **medium+** security findings on this MR from prior review comments (inl
    glab mr view {{iid}} --comments
    ```
 
-2. Address each open medium+ finding with a minimal, correct fix. Re-run relevant tests.
+2. Address each open low+ finding with a minimal, correct fix. Re-run relevant tests.
 
 3. Push to the source branch. Post a short MR comment mapping each finding → fix (or why it no longer applies).
 
-4. Remove label `block:security` if all medium+ findings are resolved. Do **not** merge the MR.
+4. Remove label `block:security` if all low+ findings are resolved. Do **not** merge the MR.
 
 ## Environment
 
