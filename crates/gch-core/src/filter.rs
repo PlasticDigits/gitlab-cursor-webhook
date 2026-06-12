@@ -139,6 +139,13 @@ impl SkipReason {
     }
 }
 
+pub fn user_is_allowed(allowed_users: &HashSet<String>, username: &str) -> bool {
+    allowed_users.contains(username)
+        || allowed_users
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(username))
+}
+
 fn has_label(labels: &[Label], target: &str) -> bool {
     labels.iter().any(|label| label.title == target)
 }
@@ -193,13 +200,31 @@ pub fn should_forward(
         });
     }
 
-    if !allowed_users.contains(&payload.user.username) {
+    if !user_is_allowed(allowed_users, &payload.user.username) {
         return Err(SkipReason::UserNotAllowed {
             username: payload.user.username.clone(),
         });
     }
 
     Ok(())
+}
+
+fn mr_label_change(payload: &GitLabMrWebhook) -> Option<&LabelChange> {
+    payload
+        .changes
+        .as_ref()
+        .and_then(|changes| changes.labels.as_ref())
+}
+
+/// Label-only MR update (no new commits) — security review must not run.
+pub fn is_mr_label_only_update(payload: &GitLabMrWebhook) -> bool {
+    payload.object_attributes.action == "update"
+        && payload
+            .object_attributes
+            .oldrev
+            .as_ref()
+            .is_none_or(|rev| rev.is_empty())
+        && mr_label_change(payload).is_some()
 }
 
 /// Returns MR tag names from `agent:{tag}` labels (e.g. `agent:fix_conflicts`).
@@ -214,7 +239,7 @@ pub fn should_forward_mr_labels(
         return Err(SkipReason::UnsupportedObjectKind);
     }
 
-    if !allowed_users.contains(&payload.user.username) {
+    if !user_is_allowed(allowed_users, &payload.user.username) {
         return Err(SkipReason::UserNotAllowed {
             username: payload.user.username.clone(),
         });
@@ -223,11 +248,7 @@ pub fn should_forward_mr_labels(
     let (mut tags, saw_reserved) = match payload.object_attributes.action.as_str() {
         "open" => collect_triggered_agent_labels(&payload.labels),
         "update" => {
-            if let Some(label_change) = payload
-                .changes
-                .as_ref()
-                .and_then(|changes| changes.labels.as_ref())
-            {
+            if let Some(label_change) = mr_label_change(payload) {
                 let added: Vec<Label> = label_change
                     .current
                     .iter()
@@ -277,7 +298,7 @@ pub fn should_forward_issue(
         return Err(SkipReason::UnsupportedObjectKind);
     }
 
-    if !allowed_users.contains(&payload.user.username) {
+    if !user_is_allowed(allowed_users, &payload.user.username) {
         return Err(SkipReason::UserNotAllowed {
             username: payload.user.username.clone(),
         });
@@ -619,5 +640,23 @@ mod tests {
         let payload = base_payload("open");
         let err = should_forward_mr_labels(&payload, &allowlist()).unwrap_err();
         assert_eq!(err, SkipReason::LabelNotTriggered);
+    }
+
+    #[test]
+    fn mr_label_webhook_deserializes_and_forwards() {
+        let body = include_str!("../../../tests/fixtures/mr_update_fix_conflicts_label.json");
+        let payload: GitLabMrWebhook = serde_json::from_str(body).expect("deserialize");
+        assert!(is_mr_label_only_update(&payload));
+        assert_eq!(
+            should_forward_mr_labels(&payload, &allowlist()).unwrap(),
+            vec!["fix_conflicts".to_string()]
+        );
+    }
+
+    #[test]
+    fn user_is_allowed_case_insensitive() {
+        let allowed = allowlist();
+        assert!(user_is_allowed(&allowed, "PlasticDigits"));
+        assert!(user_is_allowed(&allowed, "PLASTICDIGITS"));
     }
 }

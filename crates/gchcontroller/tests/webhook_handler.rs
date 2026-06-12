@@ -72,7 +72,11 @@ fn setup_db() -> Arc<Database> {
         .expect("tag");
     db.add_tag("example-project", "implement", "snap-impl", None, None, None)
         .expect("tag");
+    db.add_tag("example-project", "fix_conflicts", "snap-fix", None, None, None)
+        .expect("tag");
     db.set_prompt("example-project", "security", "Review MR {{title}}")
+        .expect("prompt");
+    db.set_prompt("example-project", "fix_conflicts", "Fix conflicts {{title}}")
         .expect("prompt");
     db.set_prompt("example-project", "verify", "Verify issue {{title}}")
         .expect("prompt");
@@ -271,6 +275,14 @@ async fn implement_then_verify_on_same_issue_both_provision() {
 
     let second = app.oneshot(signed_webhook_request(verify)).await.unwrap();
     assert_eq!(response_json(second).await["status"], "accepted");
+}
+
+#[tokio::test]
+async fn mr_update_with_fix_conflicts_label_provisions() {
+    let app = routes::router(test_state());
+    let body = include_str!("fixtures/mr_update_fix_conflicts_label.json");
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
+    assert_eq!(response_json(response).await["status"], "accepted");
 }
 
 #[tokio::test]

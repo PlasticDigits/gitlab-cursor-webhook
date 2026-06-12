@@ -18,8 +18,9 @@ use gch_core::{
     job_api::{JobListResponse, JobSummary},
     server_ipv4_from_tfstate,
     filter::{
-        select_issue_tag, should_forward, should_forward_issue, should_forward_mr_labels,
-        GitLabIssueWebhook, GitLabMrWebhook, SkipReason, WebhookEnvelope,
+        is_mr_label_only_update, select_issue_tag, should_forward, should_forward_issue,
+        should_forward_mr_labels, GitLabIssueWebhook, GitLabMrWebhook, SkipReason,
+        WebhookEnvelope,
     },
     prompt::{render_prompt, PromptContext},
     tag::MR_SECURITY_TAG,
@@ -237,6 +238,17 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
             log_skip(&action, iid, &username, None, &reason);
             return ok_response(json!({ "status": "skipped" }));
         }
+    }
+
+    if is_mr_label_only_update(&payload) {
+        log_skip(
+            &action,
+            iid,
+            &username,
+            None,
+            &SkipReason::LabelNotTriggered,
+        );
+        return ok_response(json!({ "status": "skipped" }));
     }
 
     if let Err(reason) = should_forward(&payload, &state.config.allowed_users) {
