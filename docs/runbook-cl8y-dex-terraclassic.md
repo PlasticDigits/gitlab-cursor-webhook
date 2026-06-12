@@ -17,6 +17,7 @@ Prerequisites:
 | `security` | MR opened, or MR updated with **new commits** | Merge request webhook; deduped per commit SHA |
 | `fix_conflicts` | MR with label `agent:fix_conflicts` (open or label added on update) | Merge request webhook |
 | `fix_security` | MR with label `agent:fix_security` (open or label added on update) | Merge request webhook |
+| `fix_bugfix` | MR with label `agent:fix_bugfix` (open or label added on update) | Merge request webhook |
 | `verify` | Issue open/update with label `agent:verify` | Issue webhook |
 | `implement` | Issue open/update with label `agent:implement` | Issue webhook (`implement` wins if both labels) |
 | `gap_analysis` | Issue with label `agent:gap_analysis` | Issue webhook |
@@ -89,6 +90,8 @@ run_gch tag add --project cl8y-dex-terraclassic --name fix_conflicts --snapshot 
 run_gch prompt set --project cl8y-dex-terraclassic --tag fix_conflicts --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/fix_conflicts.md"
 run_gch tag add --project cl8y-dex-terraclassic --name fix_security  --snapshot "$TERRA_SNAPSHOT"
 run_gch prompt set --project cl8y-dex-terraclassic --tag fix_security  --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/fix_security.md"
+run_gch tag add --project cl8y-dex-terraclassic --name fix_bugfix   --snapshot "$TERRA_SNAPSHOT"
+run_gch prompt set --project cl8y-dex-terraclassic --tag fix_bugfix   --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/fix_bugfix.md"
 ```
 
 One snapshot ID is enough for all three tags (same golden image).
