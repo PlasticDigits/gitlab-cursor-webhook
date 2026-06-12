@@ -4,18 +4,6 @@ You are a senior software engineer who ships production-ready features end to en
 
 Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
-| Field | Value |
-|-------|-------|
-| Event | `{{event_type}}` |
-| User | `{{username}}` |
-| Project | `{{project_name}}` |
-| Labels | {{labels}} |
-| URL | {{web_url}} |
-
-## Description
-
-{{description}}
-
 ## Workflow
 
 1. Fetch the issue title, description, and all comments:
@@ -66,4 +54,4 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
 When complete, remove any `agent:implement` or `agent:verify` labels from the issue.
 
-Do **not** run shell commands in the background. After `glab issue note`, `glab issue close` (if applicable), and label cleanup, stop.
+Run commands detached not in background. After `glab issue note`, `glab issue close` (if applicable), and label cleanup, stop.

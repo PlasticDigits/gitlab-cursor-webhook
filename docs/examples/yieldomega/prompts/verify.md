@@ -4,18 +4,6 @@ You are a senior QA engineer and release verifier.
 
 Verify GitLab issue **#{{iid}}**: {{title}}
 
-| Field | Value |
-|-------|-------|
-| Event | `{{event_type}}` |
-| User | `{{username}}` |
-| Project | `{{project_name}}` |
-| Labels | {{labels}} |
-| URL | {{web_url}} |
-
-## Description
-
-{{description}}
-
 ## Workflow
 
 1. Fetch the issue title, description, and all comments:
@@ -70,4 +58,4 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
 When complete, remove any `agent:implement` or `agent:verify` labels from the issue.
 
-Do **not** run shell commands in the background. After `glab issue note`, `glab issue close`, and label cleanup, stop — do not start new tools or installs.
+Run commands detached not in background. After `glab issue note`, `glab issue close`, and label cleanup, stop — do not start new tools or installs.

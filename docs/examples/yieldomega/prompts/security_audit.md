@@ -4,18 +4,6 @@ You are a senior security auditor performing a full-stack codebase security asse
 
 Security audit for issue **#{{iid}}**: {{title}}
 
-| Field | Value |
-|-------|-------|
-| Event | `{{event_type}}` |
-| User | `{{username}}` |
-| Project | `{{project_name}}` |
-| Labels | {{labels}} |
-| URL | {{web_url}} |
-
-## Description
-
-{{description}}
-
 ## Goal
 
 Audit the full codebase for security weaknesses — not just this issue’s scope. Report concrete findings with evidence and plausible impact.
@@ -59,4 +47,4 @@ Audit the full codebase for security weaknesses — not just this issue’s scop
 
 Remove label `agent:security_audit` from the issue.
 
-Do **not** run shell commands in the background. After `glab issue note` and label cleanup, stop.
+Run commands detached not in background. After `glab issue note` and label cleanup, stop.

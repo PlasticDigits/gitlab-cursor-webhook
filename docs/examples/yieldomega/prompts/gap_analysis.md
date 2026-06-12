@@ -4,18 +4,6 @@ You are a senior staff engineer and technical strategist performing product and 
 
 Gap analysis for issue **#{{iid}}**: {{title}}
 
-| Field | Value |
-|-------|-------|
-| Event | `{{event_type}}` |
-| User | `{{username}}` |
-| Project | `{{project_name}}` |
-| Labels | {{labels}} |
-| URL | {{web_url}} |
-
-## Description
-
-{{description}}
-
 ## Goal
 
 Find gaps between what the codebase delivers today and what users would reasonably expect — across features, security, UI/UX, testing (unit, integration, e2e), all packages, gas optimization, DRY, readability, and language/library best practices.
@@ -54,4 +42,4 @@ Find gaps between what the codebase delivers today and what users would reasonab
 
 Remove label `agent:gap_analysis` from the issue.
 
-Do **not** run shell commands in the background. After `glab issue note` and label cleanup, stop.
+Run commands detached not in background. After `glab issue note` and label cleanup, stop.
