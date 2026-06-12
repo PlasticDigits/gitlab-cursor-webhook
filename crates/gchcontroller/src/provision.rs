@@ -5,9 +5,8 @@ use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use gch_core::db::ResolvedTag;
-use gch_core::tag::WebhookTag;
 use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -15,6 +14,7 @@ use uuid::Uuid;
 use crate::cloud_init::{render_cloud_init, CloudInitParams};
 use crate::config::ControllerConfig;
 use crate::jobs::{JobRecord, JobStatus, JobStore};
+use crate::queue::{next_retry_at, should_defer_provisioning};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProvisionError {
@@ -24,19 +24,25 @@ pub enum ProvisionError {
     CloudInit(#[from] crate::cloud_init::CloudInitError),
     #[error("terraform failed: {0}")]
     Terraform(String),
-    #[error("max concurrent jobs reached")]
-    MaxConcurrentJobs,
 }
 
 #[derive(Clone)]
 pub struct ProvisionRequest {
     pub project_gitlab_path: String,
-    pub tag: WebhookTag,
+    pub tag: String,
     pub iid: u64,
     pub object_kind: String,
     pub prompt: String,
     pub resolved: ResolvedTag,
     pub git_ref: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProvisionResult {
+    pub job_id: Uuid,
+    pub runtime_token: String,
+    pub queued: bool,
+    pub retry_at: Option<DateTime<Utc>>,
 }
 
 /// Hetzner server type + location attempts when placement fails (sold out, etc.).
@@ -63,12 +69,7 @@ pub async fn provision_job(
     config: &ControllerConfig,
     jobs: &Arc<JobStore>,
     req: ProvisionRequest,
-) -> Result<(Uuid, String), ProvisionError> {
-    let active = jobs.count_active().await;
-    if active >= config.settings.max_concurrent_jobs as usize {
-        return Err(ProvisionError::MaxConcurrentJobs);
-    }
-
+) -> Result<ProvisionResult, ProvisionError> {
     let job_id = Uuid::new_v4();
     let runtime_token = Uuid::new_v4().to_string();
     let token_hash = JobStore::hash_token(&runtime_token);
@@ -76,6 +77,126 @@ pub async fn provision_job(
     let terraform_dir = config.jobs_dir.join(job_id.to_string());
     fs::create_dir_all(&terraform_dir)?;
 
+    let defer = should_defer_provisioning(config, jobs).await;
+    let retry_at = defer.then(|| next_retry_at(config));
+
+    let job = JobRecord {
+        job_id,
+        token_hash,
+        project_gitlab_path: req.project_gitlab_path.clone(),
+        tag: req.tag.clone(),
+        iid: req.iid,
+        object_kind: req.object_kind.clone(),
+        prompt: req.prompt.clone(),
+        model: req.resolved.tag.model.clone(),
+        hetzner_snapshot_id: req.resolved.tag.hetzner_snapshot_id.clone(),
+        workspace_path: req.resolved.project.workspace_path.clone(),
+        git_ref: req.git_ref.clone(),
+        status: if defer {
+            JobStatus::Queued
+        } else {
+            JobStatus::Provisioning
+        },
+        phase: Some(if defer {
+            "queued".to_string()
+        } else {
+            "terraform_apply".to_string()
+        }),
+        status_message: defer.then(|| {
+            "waiting for capacity (concurrent jobs or hetzner server limit)".to_string()
+        }),
+        runtime_token: Some(runtime_token.clone()),
+        retry_at,
+        queue_attempts: if defer { 1 } else { 0 },
+        created_at: Utc::now(),
+        last_heartbeat: None,
+        completed_at: None,
+        terraform_dir: terraform_dir.clone(),
+        server_id: None,
+    };
+    jobs.insert(job).await;
+
+    if defer {
+        info!(
+            %job_id,
+            retry_at = ?retry_at,
+            "job queued, will retry provisioning when capacity is available"
+        );
+        return Ok(ProvisionResult {
+            job_id,
+            runtime_token,
+            queued: true,
+            retry_at,
+        });
+    }
+
+    start_terraform_for_request(config, jobs, job_id, &req, &runtime_token, &terraform_dir)
+        .await?;
+
+    Ok(ProvisionResult {
+        job_id,
+        runtime_token,
+        queued: false,
+        retry_at: None,
+    })
+}
+
+pub async fn start_terraform_for_job(
+    config: &ControllerConfig,
+    jobs: &Arc<JobStore>,
+    job: &JobRecord,
+    runtime_token: &str,
+) -> Result<(), ProvisionError> {
+    let req = ProvisionRequest {
+        project_gitlab_path: job.project_gitlab_path.clone(),
+        tag: job.tag.clone(),
+        iid: job.iid,
+        object_kind: job.object_kind.clone(),
+        prompt: job.prompt.clone(),
+        resolved: ResolvedTag {
+            project: gch_core::db::ProjectRecord {
+                id: 0,
+                gitlab_path: job.project_gitlab_path.clone(),
+                name: String::new(),
+                workspace_path: job.workspace_path.clone(),
+                enabled: true,
+                signing_token: None,
+            },
+            tag: gch_core::db::TagRecord {
+                id: 0,
+                project_id: 0,
+                name: job.tag.clone(),
+                hetzner_snapshot_id: job.hetzner_snapshot_id.clone(),
+                server_type: String::new(),
+                hetzner_location: String::new(),
+                model: job.model.clone(),
+                enabled: true,
+            },
+            prompt_template: String::new(),
+        },
+        git_ref: job.git_ref.clone(),
+    };
+
+    jobs.promote_to_provisioning(job.job_id).await;
+    start_terraform_for_request(
+        config,
+        jobs,
+        job.job_id,
+        &req,
+        runtime_token,
+        &job.terraform_dir,
+    )
+    .await
+}
+
+async fn start_terraform_for_request(
+    config: &ControllerConfig,
+    jobs: &Arc<JobStore>,
+    job_id: Uuid,
+    req: &ProvisionRequest,
+    runtime_token: &str,
+    terraform_dir: &Path,
+) -> Result<(), ProvisionError> {
     let cloud_init_script = format!(
         "{}/gch-cloud-init.sh",
         req.resolved.project.workspace_path.trim_end_matches('/')
@@ -86,44 +207,21 @@ pub async fn provision_job(
         &CloudInitParams {
             job_id,
             controller_url: &config.controller_url,
-            runtime_token: &runtime_token,
+            runtime_token,
             cursor_api_key: &config.cursor_api_key,
             gitlab_token: &config.gitlab_token,
             cloud_init_script: &cloud_init_script,
         },
     )?;
 
-    let provision_req = req.clone();
-
-    let job = JobRecord {
-        job_id,
-        token_hash,
-        project_gitlab_path: provision_req.project_gitlab_path.clone(),
-        tag: provision_req.tag,
-        iid: provision_req.iid,
-        object_kind: provision_req.object_kind.clone(),
-        prompt: provision_req.prompt.clone(),
-        model: provision_req.resolved.tag.model.clone(),
-        workspace_path: provision_req.resolved.project.workspace_path.clone(),
-        git_ref: provision_req.git_ref.clone(),
-        status: JobStatus::Provisioning,
-        phase: Some("terraform_apply".to_string()),
-        status_message: None,
-        created_at: Utc::now(),
-        last_heartbeat: None,
-        completed_at: None,
-        terraform_dir: terraform_dir.clone(),
-        server_id: None,
-    };
-    jobs.insert(job).await;
-
     if config.provision_enabled {
-        // Return before terraform finishes — GitLab webhook delivery times out (~10s).
         let jobs = Arc::clone(jobs);
-        let terraform_dir = terraform_dir.clone();
+        let terraform_dir = terraform_dir.to_path_buf();
         let module_dir = config.terraform_module_dir.clone();
         let firewall_id = config.firewall_id.clone();
         let ssh_key_ids = config.ssh_key_ids.clone();
+        let provision_req = req.clone();
+        let retry_secs = config.provision_queue_retry_secs;
         tokio::spawn(async move {
             let workspace = TerraformWorkspace {
                 module_dir: &module_dir,
@@ -144,8 +242,25 @@ pub async fn provision_job(
                 }
                 Err(e) => {
                     error!(%job_id, error = %e, "terraform apply failed after all placement fallbacks");
-                    jobs.remove(job_id).await;
-                    let _ = destroy_workspace(&terraform_dir).await;
+                    let retry_at =
+                        Utc::now() + chrono::Duration::seconds(retry_secs as i64);
+                    if jobs
+                        .mark_queued(
+                            job_id,
+                            &format!("placement_failed: {e}"),
+                            retry_at,
+                        )
+                        .await
+                        .is_some()
+                    {
+                        info!(
+                            %job_id,
+                            %retry_at,
+                            "job re-queued after placement failure"
+                        );
+                    } else {
+                        let _ = destroy_workspace(&terraform_dir).await;
+                    }
                 }
             }
         });
@@ -153,7 +268,7 @@ pub async fn provision_job(
         warn!(%job_id, "GCH_PROVISION_ENABLED=false, skipping terraform apply");
     }
 
-    Ok((job_id, runtime_token))
+    Ok(())
 }
 
 pub async fn destroy_job(

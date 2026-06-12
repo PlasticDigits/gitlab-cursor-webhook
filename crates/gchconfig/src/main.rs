@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use gch_core::{
     db::Database,
     prompt::{render_prompt, PromptContext},
-    select_issue_agent, should_forward, should_forward_issue, tag::WebhookTag, IssueAgent,
+    should_forward, should_forward_issue, MR_SECURITY_TAG,
 };
 
 #[derive(Parser)]
@@ -30,7 +30,7 @@ enum Commands {
         #[command(subcommand)]
         action: ProjectCommands,
     },
-    /// Manage agent tags (security, verify, implement)
+    /// Manage agent tags (e.g. security, verify, implement, gap_analysis)
     Tag {
         #[command(subcommand)]
         action: TagCommands,
@@ -393,7 +393,7 @@ fn run_dry_run(
         "merge_request" => {
             let payload: gch_core::GitLabMrWebhook = serde_json::from_str(&body)?;
             should_forward(&payload, &allowed).map_err(|r| format!("filter: {}", r.as_str()))?;
-            let tag = WebhookTag::Security;
+            let tag = MR_SECURITY_TAG;
             let resolved = db.resolve_tag(&payload.project, tag)?;
             let Some(resolved) = resolved else {
                 println!("result=skipped reason=project_not_configured");
@@ -405,18 +405,18 @@ fn run_dry_run(
         }
         "issue" => {
             let payload: gch_core::GitLabIssueWebhook = serde_json::from_str(&body)?;
-            let agents =
+            let tags =
                 should_forward_issue(&payload, &allowed).map_err(|r| format!("filter: {}", r.as_str()))?;
-            let agent = select_issue_agent(&agents).expect("non-empty agents");
-            let tag = WebhookTag::from_issue_agent(agent);
-            let resolved = db.resolve_tag(&payload.project, tag)?;
-            let Some(resolved) = resolved else {
+            let Some(tag) = db.resolve_issue_tag(&payload.project, &tags)? else {
                 println!("result=skipped reason=project_not_configured");
                 return Ok(());
             };
-            let ctx = issue_prompt_context(&payload, agent);
+            let resolved = db
+                .resolve_tag(&payload.project, &tag)?
+                .expect("resolve_issue_tag implies configured tag");
+            let ctx = issue_prompt_context(&payload, &tag);
             let prompt = render_prompt(&resolved.prompt_template, &ctx);
-            print_resolution(&resolved.project.gitlab_path, tag, &prompt);
+            print_resolution(&resolved.project.gitlab_path, &tag, &prompt);
         }
         other => println!("result=skipped reason=unsupported_object_kind ({other})"),
     }
@@ -424,7 +424,7 @@ fn run_dry_run(
     Ok(())
 }
 
-fn print_resolution(project: &str, tag: WebhookTag, prompt: &str) {
+fn print_resolution(project: &str, tag: &str, prompt: &str) {
     println!("result=would_provision");
     println!("project={project}");
     println!("tag={tag}");
@@ -452,10 +452,11 @@ fn mr_prompt_context(payload: &gch_core::GitLabMrWebhook) -> PromptContext {
     ctx
 }
 
-fn issue_prompt_context(payload: &gch_core::GitLabIssueWebhook, agent: IssueAgent) -> PromptContext {
+fn issue_prompt_context(payload: &gch_core::GitLabIssueWebhook, tag: &str) -> PromptContext {
     let mut ctx = PromptContext::default();
     ctx.insert("event_type", &payload.object_attributes.action);
-    ctx.insert("agent", agent.as_str());
+    ctx.insert("tag", tag);
+    ctx.insert("agent", tag);
     ctx.insert("username", &payload.user.username);
     ctx.insert("project_name", &payload.project.name);
     ctx.insert(

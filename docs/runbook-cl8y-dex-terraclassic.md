@@ -17,6 +17,9 @@ Prerequisites:
 | `security` | MR opened, or MR updated with **new commits** | Merge request webhook; deduped per commit SHA |
 | `verify` | Issue open/update with label `agent:verify` | Issue webhook |
 | `implement` | Issue open/update with label `agent:implement` | Issue webhook (`implement` wins if both labels) |
+| `gap_analysis` | Issue with label `agent:gap_analysis` | Issue webhook |
+| `security_audit` | Issue with label `agent:security_audit` | Issue webhook |
+| *(other tags)* | Issue with label `agent:{tag}` | Issue webhook; `security` is reserved (MR-only) |
 
 `security` does **not** use GitLab tags or labels — only merge request events. Enable **Merge request events** and **Issue events** on the webhook; tag push is not required.
 
@@ -71,6 +74,12 @@ run_gch tag add --project cl8y-dex-terraclassic --name implement --snapshot "$TE
 run_gch prompt set --project cl8y-dex-terraclassic --tag security  --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/security.md"
 run_gch prompt set --project cl8y-dex-terraclassic --tag verify    --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/verify.md"
 run_gch prompt set --project cl8y-dex-terraclassic --tag implement --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/implement.md"
+
+# Optional audit flows (same snapshot):
+run_gch tag add --project cl8y-dex-terraclassic --name gap_analysis    --snapshot "$TERRA_SNAPSHOT"
+run_gch tag add --project cl8y-dex-terraclassic --name security_audit  --snapshot "$TERRA_SNAPSHOT"
+run_gch prompt set --project cl8y-dex-terraclassic --tag gap_analysis   --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/gap_analysis.md"
+run_gch prompt set --project cl8y-dex-terraclassic --tag security_audit --file "$REPO/docs/examples/cl8y-dex-terraclassic/prompts/security_audit.md"
 ```
 
 One snapshot ID is enough for all three tags (same golden image).

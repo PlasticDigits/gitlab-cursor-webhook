@@ -18,11 +18,11 @@ use gch_core::{
     job_api::{JobListResponse, JobSummary},
     server_ipv4_from_tfstate,
     filter::{
-        should_forward, should_forward_issue, GitLabIssueWebhook,
-        GitLabMrWebhook, IssueAgent, Project, SkipReason, WebhookEnvelope,
+        select_issue_tag, should_forward, should_forward_issue, GitLabIssueWebhook,
+        GitLabMrWebhook, SkipReason, WebhookEnvelope,
     },
     prompt::{render_prompt, PromptContext},
-    tag::WebhookTag,
+    tag::MR_SECURITY_TAG,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 use crate::config::ControllerConfig;
 use crate::jobs::{JobRecord, JobStore};
-use crate::provision::{provision_job, ProvisionError, ProvisionRequest};
+use crate::provision::{provision_job, ProvisionRequest};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -231,7 +231,7 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
         return ok_response(json!({ "status": "skipped" }));
     }
 
-    let tag = WebhookTag::Security;
+    let tag = MR_SECURITY_TAG;
     let Some(resolved) = state.db.resolve_tag(&payload.project, tag).ok().flatten() else {
         log_skip(
             &action,
@@ -243,7 +243,7 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
         return ok_response(json!({ "status": "skipped" }));
     };
 
-    if let Some(key) = commit_key(&payload, tag.as_str()) {
+    if let Some(key) = commit_key(&payload, tag) {
         if state.dedup.is_duplicate(&key) {
             log_skip(&action, iid, &username, None, &SkipReason::Duplicate);
             return ok_response(json!({ "status": "skipped" }));
@@ -262,7 +262,7 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
         state,
         ProvisionRequest {
             project_gitlab_path: resolved.project.gitlab_path.clone(),
-            tag,
+            tag: tag.to_string(),
             iid,
             object_kind: "merge_request".to_string(),
             prompt,
@@ -290,51 +290,55 @@ async fn handle_issue(state: &AppState, body: &Bytes) -> Response {
     let iid = payload.object_attributes.iid;
     let username = payload.user.username.clone();
 
-    let agents = match should_forward_issue(&payload, &state.config.allowed_users) {
-        Ok(agents) => agents,
+    let tags = match should_forward_issue(&payload, &state.config.allowed_users) {
+        Ok(tags) => tags,
         Err(reason) => {
             log_skip(&action, iid, &username, None, &reason);
             return ok_response(json!({ "status": "skipped" }));
         }
     };
 
-    let Some(agent) = resolve_issue_agent(&agents, &state.db, &payload.project) else {
+    let Some(tag) = state
+        .db
+        .resolve_issue_tag(&payload.project, &tags)
+        .ok()
+        .flatten()
+    else {
         log_skip(
             &action,
             iid,
             &username,
-            None,
+            select_issue_tag(&tags).as_deref(),
             &SkipReason::ProjectNotConfigured,
         );
         return ok_response(json!({ "status": "skipped" }));
     };
 
-    let tag = WebhookTag::from_issue_agent(agent);
-    let dedup_key = issue_key(&payload.project, iid, tag.as_str());
+    let dedup_key = issue_key(&payload.project, iid, &tag);
     if state.issue_dedup.is_duplicate(&dedup_key) {
-        log_skip(&action, iid, &username, Some(agent.as_str()), &SkipReason::Duplicate);
+        log_skip(&action, iid, &username, Some(&tag), &SkipReason::Duplicate);
         return ok_response(json!({ "status": "skipped" }));
     }
 
-    let Some(resolved) = state.db.resolve_tag(&payload.project, tag).ok().flatten() else {
+    let Some(resolved) = state.db.resolve_tag(&payload.project, &tag).ok().flatten() else {
         log_skip(
             &action,
             iid,
             &username,
-            Some(agent.as_str()),
+            Some(&tag),
             &SkipReason::ProjectNotConfigured,
         );
         return ok_response(json!({ "status": "skipped" }));
     };
 
-    let ctx = issue_prompt_context(&payload, agent);
+    let ctx = issue_prompt_context(&payload, &tag);
     let prompt = render_prompt(&resolved.prompt_template, &ctx);
 
     provision_result(
         state,
         ProvisionRequest {
             project_gitlab_path: resolved.project.gitlab_path.clone(),
-            tag,
+            tag: tag.clone(),
             iid,
             object_kind: "issue".to_string(),
             prompt,
@@ -344,26 +348,9 @@ async fn handle_issue(state: &AppState, body: &Bytes) -> Response {
         &action,
         iid,
         &username,
-        Some(agent.as_str()),
+        Some(&tag),
     )
     .await
-}
-
-fn resolve_issue_agent(
-    agents: &[IssueAgent],
-    db: &Database,
-    project: &Project,
-) -> Option<IssueAgent> {
-    for agent in [IssueAgent::Implement, IssueAgent::Verify] {
-        if !agents.contains(&agent) {
-            continue;
-        }
-        let tag = WebhookTag::from_issue_agent(agent);
-        if db.resolve_tag(project, tag).ok().flatten().is_some() {
-            return Some(agent);
-        }
-    }
-    None
 }
 
 async fn provision_result(
@@ -375,33 +362,38 @@ async fn provision_result(
     agent: Option<&str>,
 ) -> Response {
     match provision_job(&state.config, &state.jobs, req).await {
-        Ok((job_id, _token)) => {
-            info!(
-                action = %action,
-                iid,
-                username = %username,
-                agent,
-                job_id = %job_id,
-                provisioned = true,
-                "job accepted, provisioning in background"
-            );
-            ok_response(json!({
-                "status": "accepted",
-                "job_id": job_id,
-            }))
-        }
-        Err(ProvisionError::MaxConcurrentJobs) => {
-            warn!(
-                action = %action,
-                iid,
-                username = %username,
-                agent,
-                "max concurrent jobs reached"
-            );
-            ok_response(json!({
-                "status": "provision_failed",
-                "error": "max_concurrent_jobs",
-            }))
+        Ok(result) => {
+            if result.queued {
+                info!(
+                    action = %action,
+                    iid,
+                    username = %username,
+                    agent,
+                    job_id = %result.job_id,
+                    retry_at = ?result.retry_at,
+                    provisioned = false,
+                    "job queued, will retry when capacity is available"
+                );
+                ok_response(json!({
+                    "status": "queued",
+                    "job_id": result.job_id,
+                    "retry_at": result.retry_at.map(|t| t.to_rfc3339()),
+                }))
+            } else {
+                info!(
+                    action = %action,
+                    iid,
+                    username = %username,
+                    agent,
+                    job_id = %result.job_id,
+                    provisioned = true,
+                    "job accepted, provisioning in background"
+                );
+                ok_response(json!({
+                    "status": "accepted",
+                    "job_id": result.job_id,
+                }))
+            }
         }
         Err(e) => {
             error!(
@@ -578,10 +570,11 @@ fn mr_prompt_context(payload: &GitLabMrWebhook) -> PromptContext {
     ctx
 }
 
-fn issue_prompt_context(payload: &GitLabIssueWebhook, agent: IssueAgent) -> PromptContext {
+fn issue_prompt_context(payload: &GitLabIssueWebhook, tag: &str) -> PromptContext {
     let mut ctx = PromptContext::default();
     ctx.insert("event_type", &payload.object_attributes.action);
-    ctx.insert("agent", agent.as_str());
+    ctx.insert("tag", tag);
+    ctx.insert("agent", tag);
     ctx.insert("username", &payload.user.username);
     ctx.insert("project_name", &payload.project.name);
     ctx.insert(

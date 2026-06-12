@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use thiserror::Error;
 
 use crate::filter::Project;
-use crate::tag::WebhookTag;
+use crate::tag::{order_issue_tags, validate_tag_name};
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS projects (
@@ -283,7 +282,7 @@ impl Database {
         location: Option<&str>,
         model: Option<&str>,
     ) -> Result<i64, DbError> {
-        let _ = WebhookTag::from_str(tag_name).map_err(DbError::InvalidTag)?;
+        validate_tag_name(tag_name).map_err(DbError::InvalidTag)?;
         let project = self
             .find_project_by_name(project_ref)?
             .ok_or_else(|| DbError::ProjectNotFound(project_ref.to_string()))?;
@@ -443,10 +442,24 @@ impl Database {
         })
     }
 
+    /// Pick the highest-priority triggered issue tag that is configured for this project.
+    pub fn resolve_issue_tag(
+        &self,
+        project: &Project,
+        tags: &[String],
+    ) -> Result<Option<String>, DbError> {
+        for tag in order_issue_tags(tags) {
+            if self.resolve_tag(project, &tag)?.is_some() {
+                return Ok(Some(tag));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn resolve_tag(
         &self,
         project: &Project,
-        tag: WebhookTag,
+        tag_name: &str,
     ) -> Result<Option<ResolvedTag>, DbError> {
         let Some(project_rec) = self.resolve_project(project)? else {
             return Ok(None);
@@ -454,8 +467,6 @@ impl Database {
         if !project_rec.enabled {
             return Ok(None);
         }
-
-        let tag_name = tag.as_str();
         let row: Option<(TagRecord, String)> = self.with_conn(|conn| {
             conn.query_row(
                 "SELECT t.id, t.project_id, t.name, t.hetzner_snapshot_id, t.server_type,

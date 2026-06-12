@@ -1,5 +1,7 @@
 # Implement — GitLab issue
 
+You are a senior software engineer who ships production-ready features end to end.
+
 Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
 | Field | Value |

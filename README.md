@@ -29,7 +29,7 @@ Filter GitLab webhooks and provision ephemeral **Hetzner agent VMs** from golden
 ## Flow
 
 1. GitLab sends MR or issue webhook → filter/validate/dedup (unchanged rules)
-2. `gchcontroller` resolves project + tag (`security`, `verify`, `implement`) from SQLite
+2. `gchcontroller` resolves project + tag from SQLite (`security` for MRs; issue labels `agent:{tag}`)
 3. Renders prompt template, creates job, runs **isolated Terraform apply** (one state file per job)
 4. VM boots from golden snapshot, cloud-init injects secrets and runs project `gch-cloud-init.sh`
 5. VM calls `GET /api/jobs/{id}`, runs `agent -p ... --force --trust`, sends heartbeats
@@ -84,9 +84,9 @@ gchconfig dry-run --fixture tests/fixtures/mr_open.json
 
 Forwards when: `open`, or `update` with new commits (`oldrev` set); user in `ALLOWED_USERS`; project configured.
 
-### Issues → tags `verify` / `implement`
+### Issues → any configured tag via `agent:{tag}` label
 
-Forwards when label `agent:verify` or `agent:implement` is present on open, or newly added on update. **Implement** wins when both would fire.
+Forwards when an `agent:{tag}` label is present on open, or newly added on update (e.g. `agent:verify`, `agent:gap_analysis`). The `{tag}` must match a `gchconfig` tag for that project. **Reserved:** `security` is MR-only — `agent:security` on issues is ignored. When multiple agent labels fire, priority is `implement` > `verify` > others alphabetically.
 
 Dedup: MR by `project_id:iid:commit_sha:tag`; issues by `project_id:iid:tag` (each tag/flow dedupes independently).
 

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gch_core::dedup::DedupCache;
-use gchcontroller::{config::ControllerConfig, jobs::JobStore, reaper, routes};
+use gchcontroller::{config::ControllerConfig, jobs::JobStore, queue, reaper, routes};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
@@ -34,6 +34,7 @@ async fn main() {
     std::fs::create_dir_all(&config.jobs_dir).ok();
 
     reaper::spawn_reaper(jobs.clone(), settings);
+    queue::spawn_queue_worker(config.clone(), jobs.clone());
 
     tracing::info!(listen_addr = %config.listen_addr, "starting gchcontroller");
 

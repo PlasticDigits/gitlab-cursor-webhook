@@ -4,6 +4,8 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::tag::{is_issue_label_reserved, tag_from_agent_label, LABEL_AGENT_PREFIX};
+
 /// Minimal GitLab webhook header used before full MR deserialization.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct WebhookEnvelope {
@@ -62,9 +64,6 @@ pub struct ObjectAttributes {
     pub last_commit: Option<LastCommit>,
 }
 
-pub const LABEL_AGENT_VERIFY: &str = "agent:verify";
-pub const LABEL_AGENT_IMPLEMENT: &str = "agent:implement";
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Label {
     pub title: String,
@@ -105,28 +104,6 @@ pub struct GitLabIssueWebhook {
     pub object_attributes: IssueObjectAttributes,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IssueAgent {
-    Verify,
-    Implement,
-}
-
-impl IssueAgent {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            IssueAgent::Verify => "verify",
-            IssueAgent::Implement => "implement",
-        }
-    }
-
-    pub fn label(&self) -> &'static str {
-        match self {
-            IssueAgent::Verify => LABEL_AGENT_VERIFY,
-            IssueAgent::Implement => LABEL_AGENT_IMPLEMENT,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SkipReason {
     UnsupportedObjectKind,
@@ -135,6 +112,7 @@ pub enum SkipReason {
     ProjectNotConfigured,
     Duplicate,
     LabelNotTriggered,
+    LabelReserved { tag: String },
 }
 
 impl SkipReason {
@@ -146,6 +124,7 @@ impl SkipReason {
             SkipReason::ProjectNotConfigured => "project_not_configured",
             SkipReason::Duplicate => "duplicate",
             SkipReason::LabelNotTriggered => "label_not_triggered",
+            SkipReason::LabelReserved { .. } => "label_reserved",
         }
     }
 }
@@ -156,6 +135,27 @@ fn has_label(labels: &[Label], target: &str) -> bool {
 
 fn label_newly_added(previous: &[Label], current: &[Label], target: &str) -> bool {
     !has_label(previous, target) && has_label(current, target)
+}
+
+fn collect_triggered_agent_labels(labels: &[Label]) -> (Vec<String>, bool) {
+    let mut tags = Vec::new();
+    let mut saw_reserved = false;
+
+    for label in labels {
+        if let Some(tag) = tag_from_agent_label(&label.title) {
+            if !tags.contains(&tag) {
+                tags.push(tag);
+            }
+            continue;
+        }
+        if let Some(suffix) = label.title.strip_prefix(LABEL_AGENT_PREFIX) {
+            if is_issue_label_reserved(suffix) {
+                saw_reserved = true;
+            }
+        }
+    }
+
+    (tags, saw_reserved)
 }
 
 /// Returns `Ok(())` when the payload should be forwarded to Cursor.
@@ -192,14 +192,15 @@ pub fn should_forward(
     Ok(())
 }
 
-/// Returns the issue agents that should receive a Cursor webhook.
+/// Returns issue tag names that should receive a Cursor webhook.
 ///
-/// Forwards when `agent:verify` or `agent:implement` is present on a newly opened issue,
-/// or when either label was just added on an `update` (`previous` lacks it, `current` has it).
+/// Forwards when an `agent:{tag}` label is present on a newly opened issue,
+/// or when such a label was just added on an `update` (`previous` lacks it, `current` has it).
+/// Reserved tags (e.g. `agent:security`) are ignored; `security` is MR-only.
 pub fn should_forward_issue(
     payload: &GitLabIssueWebhook,
     allowed_users: &HashSet<String>,
-) -> Result<Vec<IssueAgent>, SkipReason> {
+) -> Result<Vec<String>, SkipReason> {
     if payload.object_kind != "issue" {
         return Err(SkipReason::UnsupportedObjectKind);
     }
@@ -210,63 +211,65 @@ pub fn should_forward_issue(
         });
     }
 
-    let mut agents = Vec::new();
-    match payload.object_attributes.action.as_str() {
-        "open" => {
-            if has_label(&payload.labels, LABEL_AGENT_VERIFY) {
-                agents.push(IssueAgent::Verify);
-            }
-            if has_label(&payload.labels, LABEL_AGENT_IMPLEMENT) {
-                agents.push(IssueAgent::Implement);
-            }
-        }
+    let (mut tags, saw_reserved) = match payload.object_attributes.action.as_str() {
+        "open" => collect_triggered_agent_labels(&payload.labels),
         "update" => {
             if let Some(label_change) = payload
                 .changes
                 .as_ref()
                 .and_then(|changes| changes.labels.as_ref())
             {
-                if label_newly_added(
-                    &label_change.previous,
-                    &label_change.current,
-                    LABEL_AGENT_VERIFY,
-                ) {
-                    agents.push(IssueAgent::Verify);
-                }
-                if label_newly_added(
-                    &label_change.previous,
-                    &label_change.current,
-                    LABEL_AGENT_IMPLEMENT,
-                ) {
-                    agents.push(IssueAgent::Implement);
-                }
+                let added: Vec<Label> = label_change
+                    .current
+                    .iter()
+                    .filter(|label| {
+                        label.title.starts_with(LABEL_AGENT_PREFIX)
+                            && label_newly_added(
+                                &label_change.previous,
+                                &label_change.current,
+                                &label.title,
+                            )
+                    })
+                    .cloned()
+                    .collect();
+                collect_triggered_agent_labels(&added)
+            } else {
+                (Vec::new(), false)
             }
         }
-        _ => {}
-    }
+        _ => (Vec::new(), false),
+    };
 
-    if agents.is_empty() {
+    tags.sort();
+    tags.dedup();
+
+    if tags.is_empty() {
+        if saw_reserved {
+            return Err(SkipReason::LabelReserved {
+                tag: crate::tag::MR_SECURITY_TAG.to_string(),
+            });
+        }
         return Err(SkipReason::LabelNotTriggered);
     }
 
-    Ok(agents)
+    Ok(tags)
 }
 
-/// When both agents would fire on the same issue event, pick one so they never run together.
-/// Implement takes priority over verify (typical implement-then-verify workflow).
-pub fn select_issue_agent(agents: &[IssueAgent]) -> Option<IssueAgent> {
-    if agents.contains(&IssueAgent::Implement) {
-        Some(IssueAgent::Implement)
-    } else if agents.contains(&IssueAgent::Verify) {
-        Some(IssueAgent::Verify)
-    } else {
-        None
-    }
+/// When multiple tags would fire on the same issue event, pick one so they never run together.
+pub fn select_issue_tag(tags: &[String]) -> Option<String> {
+    crate::tag::order_issue_tags(tags).into_iter().next()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::LABEL_AGENT_PREFIX;
+
+    fn agent_label(tag: &str) -> Label {
+        Label {
+            title: format!("{LABEL_AGENT_PREFIX}{tag}"),
+        }
+    }
 
     fn base_payload(action: &str) -> GitLabMrWebhook {
         GitLabMrWebhook {
@@ -401,41 +404,58 @@ mod tests {
     #[test]
     fn issue_open_with_verify_label_forwards() {
         let mut payload = base_issue("open");
-        payload.labels = vec![Label {
-            title: LABEL_AGENT_VERIFY.to_string(),
-        }];
+        payload.labels = vec![agent_label("verify")];
         assert_eq!(
             should_forward_issue(&payload, &allowlist()).unwrap(),
-            vec![IssueAgent::Verify]
+            vec!["verify".to_string()]
         );
     }
 
     #[test]
     fn issue_open_with_implement_label_forwards() {
         let mut payload = base_issue("open");
-        payload.labels = vec![Label {
-            title: LABEL_AGENT_IMPLEMENT.to_string(),
-        }];
+        payload.labels = vec![agent_label("implement")];
         assert_eq!(
             should_forward_issue(&payload, &allowlist()).unwrap(),
-            vec![IssueAgent::Implement]
+            vec!["implement".to_string()]
+        );
+    }
+
+    #[test]
+    fn issue_open_with_custom_agent_label_forwards() {
+        let mut payload = base_issue("open");
+        payload.labels = vec![agent_label("gap_analysis")];
+        assert_eq!(
+            should_forward_issue(&payload, &allowlist()).unwrap(),
+            vec!["gap_analysis".to_string()]
+        );
+    }
+
+    #[test]
+    fn issue_open_with_reserved_security_label_skips() {
+        let mut payload = base_issue("open");
+        payload.labels = vec![agent_label("security")];
+        let err = should_forward_issue(&payload, &allowlist()).unwrap_err();
+        assert!(matches!(err, SkipReason::LabelReserved { .. }));
+    }
+
+    #[test]
+    fn issue_open_with_security_and_verify_selects_verify() {
+        let mut payload = base_issue("open");
+        payload.labels = vec![agent_label("security"), agent_label("verify")];
+        assert_eq!(
+            should_forward_issue(&payload, &allowlist()).unwrap(),
+            vec!["verify".to_string()]
         );
     }
 
     #[test]
     fn issue_open_with_both_labels_selects_implement() {
         let mut payload = base_issue("open");
-        payload.labels = vec![
-            Label {
-                title: LABEL_AGENT_VERIFY.to_string(),
-            },
-            Label {
-                title: LABEL_AGENT_IMPLEMENT.to_string(),
-            },
-        ];
-        let agents = should_forward_issue(&payload, &allowlist()).unwrap();
-        assert_eq!(agents.len(), 2);
-        assert_eq!(select_issue_agent(&agents), Some(IssueAgent::Implement));
+        payload.labels = vec![agent_label("verify"), agent_label("implement")];
+        let tags = should_forward_issue(&payload, &allowlist()).unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(select_issue_tag(&tags).as_deref(), Some("implement"));
     }
 
     #[test]
@@ -451,14 +471,12 @@ mod tests {
         payload.changes = Some(IssueChanges {
             labels: Some(LabelChange {
                 previous: vec![],
-                current: vec![Label {
-                    title: LABEL_AGENT_VERIFY.to_string(),
-                }],
+                current: vec![agent_label("verify")],
             }),
         });
         assert_eq!(
             should_forward_issue(&payload, &allowlist()).unwrap(),
-            vec![IssueAgent::Verify]
+            vec!["verify".to_string()]
         );
     }
 
@@ -467,12 +485,8 @@ mod tests {
         let mut payload = base_issue("update");
         payload.changes = Some(IssueChanges {
             labels: Some(LabelChange {
-                previous: vec![Label {
-                    title: LABEL_AGENT_VERIFY.to_string(),
-                }],
-                current: vec![Label {
-                    title: LABEL_AGENT_VERIFY.to_string(),
-                }],
+                previous: vec![agent_label("verify")],
+                current: vec![agent_label("verify")],
             }),
         });
         let err = should_forward_issue(&payload, &allowlist()).unwrap_err();
@@ -490,9 +504,7 @@ mod tests {
     #[test]
     fn issue_allowlist_denies_unknown_user() {
         let mut payload = base_issue("open");
-        payload.labels = vec![Label {
-            title: LABEL_AGENT_VERIFY.to_string(),
-        }];
+        payload.labels = vec![agent_label("verify")];
         payload.user.username = "stranger".to_string();
         let err = should_forward_issue(&payload, &allowlist()).unwrap_err();
         assert_eq!(

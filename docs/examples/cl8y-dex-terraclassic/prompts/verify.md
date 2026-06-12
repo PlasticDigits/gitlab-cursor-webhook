@@ -1,5 +1,7 @@
 # Verify — GitLab issue
 
+You are a senior QA engineer and release verifier.
+
 Verify GitLab issue **#{{iid}}**: {{title}}
 
 | Field | Value |

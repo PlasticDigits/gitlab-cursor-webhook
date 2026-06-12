@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use gch_core::tag::WebhookTag;
 use gchcontroller::jobs::{JobRecord, JobStatus};
 
 use axum::{
@@ -116,6 +115,9 @@ fn test_config() -> Arc<ControllerConfig> {
         cloud_init_template: root.join("templates/cloud_init.yaml.tpl"),
         provision_enabled: false,
         admin_token: Some("admin-test-token".into()),
+        hetzner_server_limit: 15,
+        hetzner_server_queue_threshold: 14,
+        provision_queue_retry_secs: 1800,
         settings: Settings {
             controller_url: "http://127.0.0.1:8080".into(),
             firewall_id: "fw-test".into(),
@@ -317,16 +319,20 @@ async fn admin_jobs_lists_in_memory_jobs() {
             job_id,
             token_hash: "hash".into(),
             project_gitlab_path: "group/example-project".into(),
-            tag: WebhookTag::Security,
+            tag: "security".into(),
             iid: 42,
             object_kind: "merge_request".into(),
             prompt: "review".into(),
             model: "composer-2.5".into(),
+            hetzner_snapshot_id: "snap-sec".into(),
             workspace_path: "/home/agent/workspace".into(),
             git_ref: Some("main".into()),
             status: JobStatus::Running,
             phase: Some("agent".into()),
             status_message: None,
+            runtime_token: None,
+            retry_at: None,
+            queue_attempts: 0,
             created_at: Utc::now(),
             last_heartbeat: None,
             completed_at: None,
@@ -351,6 +357,68 @@ async fn admin_jobs_lists_in_memory_jobs() {
     assert_eq!(json["jobs"].as_array().unwrap().len(), 1);
     assert_eq!(json["jobs"][0]["job_id"], job_id.to_string());
     assert_eq!(json["jobs"][0]["status"], "running");
+}
+
+#[tokio::test]
+async fn issue_open_with_gap_analysis_label_provisions() {
+    let state = test_state();
+    state
+        .db
+        .add_tag("example-project", "gap_analysis", "snap-gap", None, None, None)
+        .expect("tag");
+    state
+        .db
+        .set_prompt("example-project", "gap_analysis", "Gap analysis {{title}}")
+        .expect("prompt");
+
+    let body = r#"{
+        "object_kind": "issue",
+        "user": { "username": "plasticdigits" },
+        "project": {
+            "id": 1,
+            "name": "example-project",
+            "path_with_namespace": "group/example-project"
+        },
+        "labels": [{ "title": "agent:gap_analysis" }],
+        "object_attributes": {
+            "action": "open",
+            "iid": 99,
+            "title": "Run gap analysis",
+            "description": "Scope notes",
+            "url": "https://gitlab.example/group/example-project/-/issues/99"
+        }
+    }"#;
+
+    let app = routes::router(state);
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
+    assert_eq!(response_json(response).await["status"], "accepted");
+}
+
+#[tokio::test]
+async fn issue_open_with_reserved_security_label_is_skipped() {
+    let app = routes::router(test_state());
+    let body = r#"{
+        "object_kind": "issue",
+        "user": { "username": "plasticdigits" },
+        "project": {
+            "id": 1,
+            "name": "example-project",
+            "path_with_namespace": "group/example-project"
+        },
+        "labels": [{ "title": "agent:security" }],
+        "object_attributes": {
+            "action": "open",
+            "iid": 100,
+            "title": "Security audit issue",
+            "url": "https://gitlab.example/group/example-project/-/issues/100"
+        }
+    }"#;
+
+    let response = app.oneshot(signed_webhook_request(body)).await.unwrap();
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "skipped" })
+    );
 }
 
 #[tokio::test]

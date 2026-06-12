@@ -6,13 +6,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use gch_core::tag::WebhookTag;
 use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobStatus {
+    Queued,
     Provisioning,
     Running,
     Completed,
@@ -23,6 +23,7 @@ pub enum JobStatus {
 impl JobStatus {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Queued => "queued",
             Self::Provisioning => "provisioning",
             Self::Running => "running",
             Self::Completed => "completed",
@@ -41,16 +42,21 @@ pub struct JobRecord {
     pub job_id: Uuid,
     pub token_hash: String,
     pub project_gitlab_path: String,
-    pub tag: WebhookTag,
+    pub tag: String,
     pub iid: u64,
     pub object_kind: String,
     pub prompt: String,
     pub model: String,
+    pub hetzner_snapshot_id: String,
     pub workspace_path: String,
     pub git_ref: Option<String>,
     pub status: JobStatus,
     pub phase: Option<String>,
     pub status_message: Option<String>,
+    /// Plaintext agent token; kept only for queued jobs awaiting terraform.
+    pub runtime_token: Option<String>,
+    pub retry_at: Option<DateTime<Utc>>,
+    pub queue_attempts: u32,
     pub created_at: DateTime<Utc>,
     pub last_heartbeat: Option<Instant>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -179,11 +185,60 @@ impl JobStore {
         let jobs = self.jobs.read().await;
         let mut list: Vec<JobRecord> = jobs
             .values()
-            .filter(|j| !active_only || j.status.is_active())
+            .filter(|j| {
+                !active_only || j.status.is_active() || j.status == JobStatus::Queued
+            })
             .cloned()
             .collect();
         list.sort_by_key(|j| std::cmp::Reverse(j.created_at));
         list
+    }
+
+    pub async fn list_ready_for_retry(&self, now: DateTime<Utc>) -> Vec<JobRecord> {
+        let jobs = self.jobs.read().await;
+        let mut list: Vec<JobRecord> = jobs
+            .values()
+            .filter(|j| {
+                j.status == JobStatus::Queued
+                    && j.retry_at.is_some_and(|retry_at| retry_at <= now)
+            })
+            .cloned()
+            .collect();
+        list.sort_by_key(|j| j.created_at);
+        list
+    }
+
+    pub async fn mark_queued(
+        &self,
+        job_id: Uuid,
+        reason: &str,
+        retry_at: DateTime<Utc>,
+    ) -> Option<JobRecord> {
+        let mut jobs = self.jobs.write().await;
+        if let Some(job) = jobs.get_mut(&job_id) {
+            job.status = JobStatus::Queued;
+            job.phase = Some("queued".to_string());
+            job.status_message = Some(reason.to_string());
+            job.retry_at = Some(retry_at);
+            job.queue_attempts = job.queue_attempts.saturating_add(1);
+            Some(job.clone())
+        } else {
+            None
+        }
+    }
+
+    pub async fn promote_to_provisioning(&self, job_id: Uuid) -> Option<JobRecord> {
+        let mut jobs = self.jobs.write().await;
+        if let Some(job) = jobs.get_mut(&job_id) {
+            job.status = JobStatus::Provisioning;
+            job.phase = Some("terraform_apply".to_string());
+            job.status_message = None;
+            job.retry_at = None;
+            job.runtime_token = None;
+            Some(job.clone())
+        } else {
+            None
+        }
     }
 
     pub async fn list_all(&self) -> Vec<JobRecord> {

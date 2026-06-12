@@ -25,6 +25,12 @@ pub struct ControllerConfig {
     pub cloud_init_template: PathBuf,
     pub provision_enabled: bool,
     pub admin_token: Option<String>,
+    /// Hetzner account server limit (default 15).
+    pub hetzner_server_limit: u32,
+    /// Queue new jobs when server count reaches this threshold (default limit - 1).
+    pub hetzner_server_queue_threshold: u32,
+    /// Delay before retrying queued provisioning (default 30 minutes).
+    pub provision_queue_retry_secs: u64,
     pub settings: Settings,
 }
 
@@ -151,6 +157,21 @@ impl ControllerConfig {
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty());
 
+        let hetzner_server_limit: u32 = env::var("GCH_HETZNER_SERVER_LIMIT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(15);
+
+        let hetzner_server_queue_threshold: u32 = env::var("GCH_HETZNER_SERVER_QUEUE_THRESHOLD")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| hetzner_server_limit.saturating_sub(1).max(1));
+
+        let provision_queue_retry_secs = env::var("GCH_PROVISION_QUEUE_RETRY_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1800);
+
         Ok((
             Self {
                 listen_addr,
@@ -169,6 +190,9 @@ impl ControllerConfig {
                 cloud_init_template,
                 provision_enabled,
                 admin_token,
+                hetzner_server_limit,
+                hetzner_server_queue_threshold,
+                provision_queue_retry_secs,
                 settings,
             },
             db,

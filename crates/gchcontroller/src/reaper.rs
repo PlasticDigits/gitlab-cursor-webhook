@@ -40,6 +40,7 @@ async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::pr
             .unwrap_or(timeout);
 
         let should_destroy = match job.status {
+            JobStatus::Queued => false,
             JobStatus::Completed | JobStatus::Failed => true,
             JobStatus::Provisioning => {
                 if job_age >= provisioning_timeout {
