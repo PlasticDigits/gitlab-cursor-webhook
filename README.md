@@ -88,7 +88,7 @@ Forwards when: `open`, or `update` with new commits (`oldrev` set); user in `ALL
 
 Forwards when label `agent:verify` or `agent:implement` is present on open, or newly added on update. **Implement** wins when both would fire.
 
-Dedup: MR by `project_id:iid:commit_sha`; issues by `project_id:iid` (shared across verify/implement).
+Dedup: MR by `project_id:iid:commit_sha:tag`; issues by `project_id:iid:tag` (each tag/flow dedupes independently).
 
 ## Golden images
 

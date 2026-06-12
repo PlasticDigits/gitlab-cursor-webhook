@@ -255,6 +255,23 @@ async fn issue_update_with_label_added_provisions_implement() {
 }
 
 #[tokio::test]
+async fn implement_then_verify_on_same_issue_both_provision() {
+    let app = routes::router(test_state());
+    let implement = include_str!("fixtures/issue_update_label_added.json");
+    let verify = include_str!("fixtures/issue_update_verify_label_added.json");
+
+    let first = app
+        .clone()
+        .oneshot(signed_webhook_request(implement))
+        .await
+        .unwrap();
+    assert_eq!(response_json(first).await["status"], "accepted");
+
+    let second = app.oneshot(signed_webhook_request(verify)).await.unwrap();
+    assert_eq!(response_json(second).await["status"], "accepted");
+}
+
+#[tokio::test]
 async fn duplicate_open_webhook_is_skipped() {
     let app = routes::router(test_state());
     let body = include_str!("fixtures/mr_open.json");

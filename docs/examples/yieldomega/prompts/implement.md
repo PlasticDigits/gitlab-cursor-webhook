@@ -34,7 +34,7 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
    - Summary of changes (what/why, tied to #{{iid}})
    - Checklist: each acceptance item → command or manual step → PASS/FAIL/SKIP
-   - Leave the issue **open**. If any criteria FAIL/SKIP, list blockers.
+   - Leave the issue **open**; do not use Closes/Fixes/Resolves/Implements #{{iid}} in the MR (GitLab auto-closes on merge). If any criteria FAIL/SKIP, list blockers.
    - Verification checklist for third parties to verify your work
    - Ideas for follow-ups only if relevant (otherwise omit)
    - MR must **not** be a draft

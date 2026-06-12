@@ -36,7 +36,7 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
    - Summary of changes
    - Checklist mapping each acceptance item → command/output
-   - **Only if you opened an MR or made changes:** even if all criteria pass, leave the issue **open**
+   - **Only if you opened an MR or made changes:** even if all criteria pass, leave the issue **open**; do not use Closes/Fixes/Resolves/Implements #{{iid}} in the MR (GitLab auto-closes on merge)
    - Ideas for follow-ups if you have any (otherwise skip)
 
 4. **Else — no changes (no MR):**

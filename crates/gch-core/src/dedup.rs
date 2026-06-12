@@ -35,13 +35,13 @@ impl DedupCache {
     }
 }
 
-/// Per-issue key shared by verify and implement so only one agent runs per window.
-pub fn issue_key(project: &Project, iid: u64) -> String {
-    format!("{}:{}", project.id, iid)
+/// Per-issue, per-tag flow key — implement and verify dedupe independently.
+pub fn issue_key(project: &Project, iid: u64, tag: &str) -> String {
+    format!("{}:{}:{}", project.id, iid, tag)
 }
 
-/// `"{project_id}:{iid}:{commit_sha}"` when `last_commit.id` is present.
-pub fn commit_key(payload: &GitLabMrWebhook) -> Option<String> {
+/// `"{project_id}:{iid}:{commit_sha}:{tag}"` when `last_commit.id` is present.
+pub fn commit_key(payload: &GitLabMrWebhook, tag: &str) -> Option<String> {
     let commit = payload
         .object_attributes
         .last_commit
@@ -52,8 +52,8 @@ pub fn commit_key(payload: &GitLabMrWebhook) -> Option<String> {
         return None;
     }
     Some(format!(
-        "{}:{}:{}",
-        payload.project.id, payload.object_attributes.iid, commit
+        "{}:{}:{}:{}",
+        payload.project.id, payload.object_attributes.iid, commit, tag
     ))
 }
 
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn same_commit_on_same_mr_is_duplicate() {
         let cache = DedupCache::new(3600);
-        let key = commit_key(&sample(34, "abc123")).unwrap();
+        let key = commit_key(&sample(34, "abc123"), "security").unwrap();
         assert!(!cache.is_duplicate(&key));
         assert!(cache.is_duplicate(&key));
     }
@@ -106,8 +106,8 @@ mod tests {
     #[test]
     fn same_commit_different_mr_is_not_duplicate() {
         let cache = DedupCache::new(3600);
-        let a = commit_key(&sample(34, "abc123")).unwrap();
-        let b = commit_key(&sample(35, "abc123")).unwrap();
+        let a = commit_key(&sample(34, "abc123"), "security").unwrap();
+        let b = commit_key(&sample(35, "abc123"), "security").unwrap();
         assert!(!cache.is_duplicate(&a));
         assert!(!cache.is_duplicate(&b));
     }
@@ -115,16 +115,25 @@ mod tests {
     #[test]
     fn new_commit_on_same_mr_is_not_duplicate() {
         let cache = DedupCache::new(3600);
-        let first = commit_key(&sample(34, "abc123")).unwrap();
-        let second = commit_key(&sample(34, "def456")).unwrap();
+        let first = commit_key(&sample(34, "abc123"), "security").unwrap();
+        let second = commit_key(&sample(34, "def456"), "security").unwrap();
         assert!(!cache.is_duplicate(&first));
         assert!(!cache.is_duplicate(&second));
     }
 
     #[test]
+    fn same_commit_different_mr_tags_are_not_duplicate() {
+        let cache = DedupCache::new(3600);
+        let security = commit_key(&sample(34, "abc123"), "security").unwrap();
+        let other = commit_key(&sample(34, "abc123"), "review").unwrap();
+        assert!(!cache.is_duplicate(&security));
+        assert!(!cache.is_duplicate(&other));
+    }
+
+    #[test]
     fn entry_expires_after_ttl() {
         let cache = DedupCache::new(1);
-        let key = commit_key(&sample(34, "abc123")).unwrap();
+        let key = commit_key(&sample(34, "abc123"), "security").unwrap();
         assert!(!cache.is_duplicate(&key));
         assert!(cache.is_duplicate(&key));
         thread::sleep(StdDuration::from_millis(1100));
@@ -132,25 +141,27 @@ mod tests {
     }
 
     #[test]
-    fn issue_key_is_per_project_and_iid() {
+    fn issue_key_includes_tag() {
         let project = Project {
             id: 42,
             name: "p".to_string(),
             path_with_namespace: None,
         };
-        assert_eq!(issue_key(&project, 7), "42:7");
+        assert_eq!(issue_key(&project, 7, "verify"), "42:7:verify");
     }
 
     #[test]
-    fn issue_dedup_is_shared_across_agents() {
+    fn issue_dedup_is_per_tag() {
         let cache = DedupCache::new(900);
         let project = Project {
             id: 1,
             name: "p".to_string(),
             path_with_namespace: None,
         };
-        let key = issue_key(&project, 12);
-        assert!(!cache.is_duplicate(&key));
-        assert!(cache.is_duplicate(&key));
+        let implement = issue_key(&project, 12, "implement");
+        let verify = issue_key(&project, 12, "verify");
+        assert!(!cache.is_duplicate(&implement));
+        assert!(cache.is_duplicate(&implement));
+        assert!(!cache.is_duplicate(&verify));
     }
 }

@@ -243,7 +243,7 @@ async fn handle_merge_request(state: &AppState, body: &Bytes) -> Response {
         return ok_response(json!({ "status": "skipped" }));
     };
 
-    if let Some(key) = commit_key(&payload) {
+    if let Some(key) = commit_key(&payload, tag.as_str()) {
         if state.dedup.is_duplicate(&key) {
             log_skip(&action, iid, &username, None, &SkipReason::Duplicate);
             return ok_response(json!({ "status": "skipped" }));
@@ -310,7 +310,7 @@ async fn handle_issue(state: &AppState, body: &Bytes) -> Response {
     };
 
     let tag = WebhookTag::from_issue_agent(agent);
-    let dedup_key = issue_key(&payload.project, iid);
+    let dedup_key = issue_key(&payload.project, iid, tag.as_str());
     if state.issue_dedup.is_duplicate(&dedup_key) {
         log_skip(&action, iid, &username, Some(agent.as_str()), &SkipReason::Duplicate);
         return ok_response(json!({ "status": "skipped" }));

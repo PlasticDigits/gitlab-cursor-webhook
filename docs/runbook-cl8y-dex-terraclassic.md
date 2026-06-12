@@ -114,7 +114,7 @@ journalctl -u gitlab-cursor-webhook.service -n 30 --no-pager
 | `gchconfig project list` empty | `GCH_DB_PATH` — use `export GCH_DB_PATH=/var/lib/gch/gch.db` or `run_gch` wrapper; confirm same path as `gchcontroller` (`/proc/$(systemctl show -p MainPID --value gitlab-cursor-webhook.service)/environ`) |
 | Webhook 401 | Signing token in SQLite matches GitLab webhook; regenerate if lost |
 | Webhook 200 skipped | User not in `ALLOWED_USERS`; project/tags/prompts missing; MR action filtered (e.g. approval only) |
-| Duplicate skipped | Expected for same commit SHA on same MR within `DEDUP_TTL_SECS` (default 24h) |
+| Duplicate skipped | Expected for the same tag/flow within its TTL: MR `DEDUP_TTL_SECS` (default 24h), issue `ISSUE_DEDUP_TTL_SECS` (default 15m). Implement and verify dedupe independently. |
 
 ## Related
 
