@@ -162,6 +162,10 @@ sudo -u agent bash -lc 'ls "$HOME/.cache/ms-playwright"/chromium-* "$HOME/.cache
 
 **yieldomega only:**
 
+| Note | Detail |
+|------|--------|
+| Postgres | `bootstrap-cloud-vm-toolchain.sh` already runs `bootstrap-cloud-postgres-native.sh` — do **not** call it again from `gch-cloud-setup.sh` (second run fails after port moves to 5433). |
+
 ```bash
 test -f /opt/cursor/browser-extensions/rabby/manifest.json
 sudo -u agent bash -lc 'forge --version && anvil --version'
@@ -170,6 +174,59 @@ sudo -u agent bash -lc 'bash /home/agent/workspace/scripts/verify-cloud-postgres
 sudo -u agent bash -lc 'ls "$HOME/.cache/ms-playwright"/chromium-* >/dev/null'
 # optional strong signal:
 # sudo -u agent bash -lc 'cd /home/agent/workspace && bash scripts/e2e-anvil.sh'
+```
+
+**Recover if setup was killed** (`Terminated`, OOM during Rabby wallet import, or missing `golden-image-verify.log`):
+
+```bash
+# Kill stale Chromium holding the Rabby profile
+pkill -9 -f 'chrome-profile-rabby' 2>/dev/null || true
+rm -f /opt/cursor/chrome-profile-rabby/SingletonLock
+
+# Finish Playwright install only (skip wallet import — finalize agent handles it)
+if ! pgrep -x Xvfb >/dev/null 2>&1; then Xvfb :99 -screen 0 1920x1080x24 & sleep 1; fi
+sudo -u agent env DISPLAY=:99 PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 \
+  YIELDOMEGA_SKIP_RABBY_WALLET_IMPORT=1 YIELDOMEGA_SKIP_RABBY_INJECTION_VERIFY=1 \
+  bash -lc 'bash /home/agent/workspace/scripts/bootstrap-cloud-agent.sh'
+
+# Run finalize agent (writes /home/agent/.gch/golden-image-verify.log)
+# Use stream-json + stream-partial-output so progress is visible (text format buffers silently).
+export CURSOR_API_KEY='your-key'
+if ! pgrep -x Xvfb >/dev/null 2>&1; then Xvfb :99 -screen 0 1920x1080x24 & sleep 1; fi
+# Optional: fetch stream formatter if missing (golden-yieldomega builder)
+WATCH=/home/agent/gch-agent-stream-watch.py
+if [[ ! -x "${WATCH}" ]]; then
+  curl -fsSL https://gitlab.com/plasticdigits/gitlab-cursor-webhook/-/raw/main/scripts/gch-agent-stream-watch.py -o "${WATCH}"
+  chmod 755 "${WATCH}"
+fi
+sudo -u agent env CURSOR_API_KEY="$CURSOR_API_KEY" DISPLAY=:99 \
+  PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 bash -lc '
+  cd /home/agent/workspace
+  agent --print "$(cat gch-golden-image-finalize.md)" \
+    --model composer-2.5 --force --trust \
+    --workspace /home/agent/workspace \
+    --output-format stream-json \
+    --stream-partial-output \
+    2>&1 | stdbuf -oL tee /tmp/finalize-agent.raw | python3 /home/agent/gch-agent-stream-watch.py
+  echo "exit: ${PIPESTATUS[0]}"
+'
+# Raw JSON lines: /tmp/finalize-agent.raw
+# Second terminal: tail -f /tmp/finalize-agent.raw
+cat /home/agent/.gch/golden-image-verify.log
+
+# Or write verify log manually if finalize also fails:
+sudo -u agent mkdir -p /home/agent/.gch
+sudo -u agent bash -lc '
+  {
+    echo "=== yieldomega golden image manual verify $(date -Is) ==="
+    rustc --version; cargo --version
+    forge --version; anvil --version
+    node --version; agent about; glab --version
+    test -f /opt/cursor/browser-extensions/rabby/manifest.json && echo "Rabby ext: OK"
+    bash /home/agent/workspace/scripts/verify-cloud-postgres.sh
+    bash /home/agent/workspace/scripts/verify-rabby-playwright-injection.sh
+  } 2>&1 | tee /home/agent/.gch/golden-image-verify.log
+'
 ```
 
 If `apt upgrade` installed a new kernel during setup, **reboot** and re-run the smoke checks above before cleanup:

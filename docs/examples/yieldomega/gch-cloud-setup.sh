@@ -9,6 +9,7 @@ WORKSPACE="${WORKSPACE:-/home/agent/workspace}"
 AGENT_USER="${AGENT_USER:-agent}"
 GCH_RUNNER_URL="${GCH_RUNNER_URL:-https://gitlab.com/plasticdigits/gitlab-cursor-webhook/-/raw/main/scripts/gch-cloud-init-runner.sh}"
 GCH_IDLE_WRAP_URL="${GCH_IDLE_WRAP_URL:-https://gitlab.com/plasticdigits/gitlab-cursor-webhook/-/raw/main/scripts/gch-agent-idle-wrap.py}"
+GCH_STREAM_WATCH_URL="${GCH_STREAM_WATCH_URL:-https://gitlab.com/plasticdigits/gitlab-cursor-webhook/-/raw/main/scripts/gch-agent-stream-watch.py}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_HOME="/home/${AGENT_USER}"
 GCH_GOLDEN_IMAGE_MODEL="${GCH_GOLDEN_IMAGE_MODEL:-composer-2.5}"
@@ -153,6 +154,15 @@ else
   echo "WARN: gch-agent-idle-wrap.py not installed; agent may hang after job completes." >&2
 fi
 
+STREAM_WATCH_DST="${AGENT_HOME}/gch-agent-stream-watch.py"
+if [[ -f "${SCRIPT_DIR}/gch-agent-stream-watch.py" ]]; then
+  install -m 755 -o "${AGENT_USER}" -g "${AGENT_USER}" \
+    "${SCRIPT_DIR}/gch-agent-stream-watch.py" "${STREAM_WATCH_DST}"
+elif curl -fsSL "${GCH_STREAM_WATCH_URL}" -o "${STREAM_WATCH_DST}"; then
+  chown "${AGENT_USER}:${AGENT_USER}" "${STREAM_WATCH_DST}"
+  chmod 755 "${STREAM_WATCH_DST}"
+fi
+
 echo "==> Workspace"
 mkdir -p "${WORKSPACE}"
 if [[ -d "${SCRIPT_DIR}/.git" ]]; then
@@ -166,22 +176,26 @@ if [[ -f "${WORKSPACE}/scripts/bootstrap-dev.sh" ]]; then
 fi
 
 if [[ -f "${WORKSPACE}/scripts/bootstrap-cloud-vm-toolchain.sh" ]]; then
-  echo "==> Project toolchain (Foundry/Anvil, Rust, glab, Rabby extension, Docker)"
+  echo "==> Project toolchain (Foundry/Anvil, Rust, glab, Rabby, Docker, Postgres)"
   _agent_sh bash -lc "bash '${WORKSPACE}/scripts/bootstrap-cloud-vm-toolchain.sh'"
 fi
 
-if [[ -f "${WORKSPACE}/scripts/bootstrap-cloud-postgres-native.sh" ]]; then
-  echo "==> Native Postgres (indexer)"
-  bash "${WORKSPACE}/scripts/bootstrap-cloud-postgres-native.sh"
-fi
+# Postgres is started by bootstrap-cloud-vm-toolchain.sh (do not run bootstrap-cloud-postgres-native.sh again as root — psql defaults to 5432 after port is moved to 5433).
 
 if [[ -f "${WORKSPACE}/scripts/bootstrap-cloud-agent.sh" ]]; then
-  echo "==> Playwright + Rabby dev wallets"
+  echo "==> Playwright + Rabby (wallet import deferred to finalize agent)"
   if ! pgrep -x Xvfb >/dev/null 2>&1; then
     Xvfb :99 -screen 0 1920x1080x24 &
     sleep 1
   fi
-  _agent_sh env DISPLAY=:99 bash -lc "bash '${WORKSPACE}/scripts/bootstrap-cloud-agent.sh'"
+  # Wallet import is slow and can OOM-kill the builder; finalize agent runs it with timeout.
+  _agent_sh env \
+    DISPLAY=:99 \
+    YIELDOMEGA_SKIP_RABBY_WALLET_IMPORT=1 \
+    YIELDOMEGA_SKIP_RABBY_INJECTION_VERIFY=1 \
+    bash -lc "bash '${WORKSPACE}/scripts/bootstrap-cloud-agent.sh'" || {
+    echo "WARN: bootstrap-cloud-agent.sh failed — finalize agent will retry Rabby steps." >&2
+  }
 fi
 
 echo "==> Golden image finalize (Cursor agent)"
@@ -204,11 +218,13 @@ sudo -u "${AGENT_USER}" env \
   bash -lc "
     set -euo pipefail
     cd '${WORKSPACE}'
-    agent -p \"\$(cat '${FINALIZE_PROMPT}')\" \
+    agent --print \"\$(cat '${FINALIZE_PROMPT}')\" \
       --model '${GCH_GOLDEN_IMAGE_MODEL}' \
       --force --trust \
       --workspace '${WORKSPACE}' \
-      --output-format text
+      --output-format stream-json \
+      --stream-partial-output \
+      2>&1 | tee '${AGENT_HOME}/.gch/finalize-agent.raw' | python3 '${AGENT_HOME}/gch-agent-stream-watch.py'
   "
 
 echo "Setup complete. Review ${AGENT_HOME}/.gch/golden-image-verify.log, then run pre-snapshot cleanup."
