@@ -32,7 +32,9 @@ pub struct ControllerConfig {
     pub hetzner_server_limit: u32,
     /// Queue new jobs when server count reaches this threshold (default limit - 1).
     pub hetzner_server_queue_threshold: u32,
-    /// Delay before retrying queued provisioning (default 30 minutes).
+    /// Poll interval when waiting for capacity (default 30 seconds).
+    pub provision_queue_poll_secs: u64,
+    /// Delay before retrying after placement failures (default 30 minutes).
     pub provision_queue_retry_secs: u64,
     pub settings: Settings,
 }
@@ -177,6 +179,11 @@ impl ControllerConfig {
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(|| hetzner_server_limit.saturating_sub(1).max(1));
 
+        let provision_queue_poll_secs = env::var("GCH_PROVISION_QUEUE_POLL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
+
         let provision_queue_retry_secs = env::var("GCH_PROVISION_QUEUE_RETRY_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -203,6 +210,7 @@ impl ControllerConfig {
                 admin_token,
                 hetzner_server_limit,
                 hetzner_server_queue_threshold,
+                provision_queue_poll_secs,
                 provision_queue_retry_secs,
                 settings,
             },

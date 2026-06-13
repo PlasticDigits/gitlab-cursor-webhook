@@ -1,29 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use gch_core::db::Settings;
 use tokio::time::{interval, Duration};
 use tracing::{info, warn};
 
+use crate::config::ControllerConfig;
 use crate::jobs::{JobStatus, JobStore};
 use crate::provision::destroy_job;
 
-pub fn spawn_reaper(jobs: Arc<JobStore>, settings: Settings) {
+pub fn spawn_reaper(config: Arc<ControllerConfig>, jobs: Arc<JobStore>, settings: Settings) {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(30));
         loop {
             ticker.tick().await;
-            if let Err(e) = reap_once(&jobs, &settings).await {
+            if let Err(e) = reap_once(&config, &jobs, &settings).await {
                 warn!(error = %e, "reaper cycle error");
             }
         }
     });
 }
 
-async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::provision::ProvisionError> {
-    let now = Instant::now();
+async fn reap_once(
+    config: &ControllerConfig,
+    jobs: &Arc<JobStore>,
+    settings: &Settings,
+) -> Result<(), crate::provision::ProvisionError> {
+    let now = std::time::Instant::now();
     let timeout = JobStore::job_timeout(settings.job_timeout_secs);
     let stale = JobStore::heartbeat_stale(settings.heartbeat_stale_secs);
     let provisioning_timeout =
@@ -80,7 +84,7 @@ async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::pr
         };
 
         if should_destroy {
-            destroy_job(jobs, job.job_id).await?;
+            destroy_job(config, Arc::clone(jobs), job.job_id).await?;
         }
     }
 

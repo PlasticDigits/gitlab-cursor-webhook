@@ -611,9 +611,10 @@ async fn complete_job(
 
     if state.jobs.mark_complete(job_id, success, msg).await.is_some() {
         // Reaper will destroy; trigger async destroy for faster cleanup
+        let config = state.config.clone();
         let jobs = state.jobs.clone();
         tokio::spawn(async move {
-            let _ = crate::provision::destroy_job(&jobs, job_id).await;
+            let _ = crate::provision::destroy_job(&config, jobs, job_id).await;
         });
         ok_response(json!({ "status": "ok" }))
     } else {

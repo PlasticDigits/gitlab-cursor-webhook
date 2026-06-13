@@ -196,6 +196,15 @@ impl JobStore {
         list
     }
 
+    pub async fn oldest_queued(&self) -> Option<JobRecord> {
+        let jobs = self.jobs.read().await;
+        jobs
+            .values()
+            .filter(|j| j.status == JobStatus::Queued)
+            .min_by_key(|j| j.created_at)
+            .cloned()
+    }
+
     pub async fn list_ready_for_retry(&self, now: DateTime<Utc>) -> Vec<JobRecord> {
         let jobs = self.jobs.read().await;
         let mut list: Vec<JobRecord> = jobs

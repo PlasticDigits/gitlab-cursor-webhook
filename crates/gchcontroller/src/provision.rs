@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use gch_core::db::ResolvedTag;
@@ -18,7 +19,7 @@ use uuid::Uuid;
 use crate::cloud_init::{render_cloud_init, CloudInitParams};
 use crate::config::ControllerConfig;
 use crate::jobs::{JobRecord, JobStatus, JobStore};
-use crate::queue::{next_retry_at, should_defer_provisioning};
+use crate::queue::{self, promote_queued_jobs};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProvisionError {
@@ -129,8 +130,8 @@ pub async fn provision_job(
     let terraform_dir = config.jobs_dir.join(job_id.to_string());
     fs::create_dir_all(&terraform_dir)?;
 
-    let defer = should_defer_provisioning(config, jobs).await;
-    let retry_at = defer.then(|| next_retry_at(config));
+    let defer = queue::should_defer_provisioning(config, jobs).await;
+    let retry_at = defer.then(|| queue::next_retry_at(config));
 
     let job = JobRecord {
         job_id,
@@ -346,7 +347,8 @@ async fn start_terraform_for_request(
 }
 
 pub async fn destroy_job(
-    jobs: &JobStore,
+    config: &ControllerConfig,
+    jobs: Arc<JobStore>,
     job_id: Uuid,
 ) -> Result<(), ProvisionError> {
     let job = match jobs.get(job_id).await {
@@ -358,6 +360,7 @@ pub async fn destroy_job(
     };
 
     provision_tasks().cancel_and_wait(job_id).await;
+    wait_for_state_lock_release(&job.terraform_dir, Duration::from_secs(15)).await;
 
     if let Err(e) = destroy_workspace(&job.terraform_dir).await {
         error!(%job_id, error = %e, "terraform destroy failed; will retry");
@@ -366,6 +369,11 @@ pub async fn destroy_job(
 
     jobs.remove(job_id).await;
     info!(%job_id, "job destroyed and removed from memory");
+
+    if let Err(e) = promote_queued_jobs(config, &jobs).await {
+        warn!(error = %e, "failed to promote queued job after destroy");
+    }
+
     Ok(())
 }
 
@@ -393,11 +401,20 @@ async fn apply_with_placement_fallbacks(
         write_terraform_workspace(terraform_dir, workspace, server_type, location)?;
 
         if !initialized {
-            run_terraform(terraform_dir, "init", false, job_id, Some(&mut cancel_rx)).await?;
+            run_terraform(terraform_dir, "init", false, job_id, Some(&mut cancel_rx), None)
+                .await?;
             initialized = true;
         }
 
-        match run_terraform(terraform_dir, "apply", true, job_id, Some(&mut cancel_rx)).await {
+        match run_terraform(
+            terraform_dir,
+            "apply",
+            true,
+            job_id,
+            Some(&mut cancel_rx),
+            None,
+        )
+        .await {
             Ok(()) => return Ok((server_type, location)),
             Err(ProvisionError::Cancelled) => return Err(ProvisionError::Cancelled),
             Err(e) => {
@@ -409,9 +426,15 @@ async fn apply_with_placement_fallbacks(
                     "placement failed, trying next fallback"
                 );
                 last_err = Some(e);
-                let _ =
-                    run_terraform(terraform_dir, "destroy", true, job_id, Some(&mut cancel_rx))
-                        .await;
+                let _ = run_terraform(
+                    terraform_dir,
+                    "destroy",
+                    true,
+                    job_id,
+                    Some(&mut cancel_rx),
+                    None,
+                )
+                .await;
             }
         }
     }
@@ -422,11 +445,87 @@ async fn apply_with_placement_fallbacks(
 }
 
 async fn destroy_workspace(terraform_dir: &Path) -> Result<(), ProvisionError> {
-    if terraform_dir.join("main.tf").exists() {
-        run_terraform(terraform_dir, "destroy", true, Uuid::nil(), None).await?;
+    if !terraform_dir.join("main.tf").exists() {
+        fs::remove_dir_all(terraform_dir).ok();
+        return Ok(());
     }
-    fs::remove_dir_all(terraform_dir).ok();
-    Ok(())
+
+    const MAX_ATTEMPTS: u32 = 5;
+    for attempt in 0..MAX_ATTEMPTS {
+        match run_terraform(terraform_dir, "destroy", true, Uuid::nil(), None, None).await {
+            Ok(()) => {
+                fs::remove_dir_all(terraform_dir).ok();
+                return Ok(());
+            }
+            Err(e) if is_state_lock_error(&e) && attempt + 1 < MAX_ATTEMPTS => {
+                warn!(
+                    dir = %terraform_dir.display(),
+                    attempt = attempt + 1,
+                    error = %e,
+                    "terraform destroy blocked by state lock; retrying"
+                );
+                let _ = try_force_unlock(terraform_dir).await;
+                wait_for_state_lock_release(terraform_dir, Duration::from_secs(2)).await;
+                let backoff = Duration::from_millis(500 * (attempt as u64 + 1));
+                sleep(backoff).await;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    Err(ProvisionError::Terraform(
+        "destroy failed after state-lock retries".to_string(),
+    ))
+}
+
+fn is_state_lock_error(err: &ProvisionError) -> bool {
+    match err {
+        ProvisionError::Terraform(msg) => {
+            msg.contains("Error acquiring the state lock")
+                || msg.contains("resource temporarily unavailable")
+        }
+        _ => false,
+    }
+}
+
+fn read_lock_id(terraform_dir: &Path) -> Option<String> {
+    let lock_path = terraform_dir.join(".terraform.tfstate.lock.info");
+    let content = fs::read_to_string(lock_path).ok()?;
+    let info: serde_json::Value = serde_json::from_str(&content).ok()?;
+    info.get("ID")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+async fn try_force_unlock(terraform_dir: &Path) -> Result<(), ProvisionError> {
+    let Some(lock_id) = read_lock_id(terraform_dir) else {
+        return Ok(());
+    };
+    info!(
+        dir = %terraform_dir.display(),
+        lock_id = %lock_id,
+        "forcing terraform state unlock after cancelled apply"
+    );
+    run_terraform(
+        terraform_dir,
+        "force-unlock",
+        false,
+        Uuid::nil(),
+        None,
+        Some(&["-force", &lock_id]),
+    )
+    .await
+}
+
+async fn wait_for_state_lock_release(terraform_dir: &Path, timeout: Duration) {
+    let lock_path = terraform_dir.join(".terraform.tfstate.lock.info");
+    if !lock_path.exists() {
+        return;
+    }
+    let deadline = Instant::now() + timeout;
+    while lock_path.exists() && Instant::now() < deadline {
+        sleep(Duration::from_millis(250)).await;
+    }
 }
 
 async fn run_terraform(
@@ -435,6 +534,7 @@ async fn run_terraform(
     auto_approve: bool,
     job_id: Uuid,
     mut cancel_rx: Option<&mut watch::Receiver<bool>>,
+    extra_args: Option<&[&str]>,
 ) -> Result<(), ProvisionError> {
     let hcloud_token = std::env::var("HCLOUD_TOKEN").unwrap_or_default();
 
@@ -456,6 +556,9 @@ async fn run_terraform(
     }
 
     let mut args = vec![action, "-input=false", "-no-color"];
+    if let Some(extra) = extra_args {
+        args.extend_from_slice(extra);
+    }
     if auto_approve {
         args.push("-auto-approve");
     }

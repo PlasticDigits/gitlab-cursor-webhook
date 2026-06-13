@@ -56,7 +56,7 @@ async fn main() {
 
     std::fs::create_dir_all(&config.jobs_dir).ok();
 
-    reaper::spawn_reaper(jobs.clone(), settings);
+    reaper::spawn_reaper(config.clone(), jobs.clone(), settings);
     queue::spawn_queue_worker(config.clone(), jobs.clone());
 
     tracing::info!(listen_addr = %config.listen_addr, "starting gchcontroller");

@@ -122,6 +122,7 @@ fn test_config() -> Arc<ControllerConfig> {
         admin_token: Some("admin-test-token".into()),
         hetzner_server_limit: 15,
         hetzner_server_queue_threshold: 14,
+        provision_queue_poll_secs: 30,
         provision_queue_retry_secs: 1800,
         settings: Settings {
             controller_url: "http://127.0.0.1:8080".into(),
