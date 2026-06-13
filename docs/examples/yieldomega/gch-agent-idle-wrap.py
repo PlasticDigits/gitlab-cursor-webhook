@@ -102,7 +102,15 @@ def main() -> int:
                 saw_output = True
             elif proc.poll() is not None:
                 break
-        elif saw_output and (time.monotonic() - last_output) >= idle_limit:
+            else:
+                # Hung CLI: fd readable but no bytes — sleep so we do not spin.
+                time.sleep(min(1.0, max(0.0, idle_limit - (time.monotonic() - last_output))))
+
+        if (
+            saw_output
+            and proc.poll() is None
+            and (time.monotonic() - last_output) >= idle_limit
+        ):
             label = "short idle" if use_short_idle else "long idle"
             print(
                 f"gch-agent-idle-wrap: no output for {idle_limit}s ({label}); stopping agent",

@@ -347,6 +347,7 @@ async fn admin_jobs_lists_in_memory_jobs() {
             retry_at: None,
             queue_attempts: 0,
             created_at: Utc::now(),
+            provisioning_started_at: Some(Utc::now()),
             last_heartbeat: None,
             completed_at: None,
             terraform_dir: state.config.jobs_dir.join(job_id.to_string()),

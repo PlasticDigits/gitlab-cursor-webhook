@@ -30,10 +30,6 @@ async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::pr
         JobStore::provisioning_timeout(settings.provisioning_timeout_secs);
 
     for job in jobs.list_for_reaper().await {
-        if job.status == JobStatus::Destroying {
-            continue;
-        }
-
         let job_age = chrono::Utc::now()
             .signed_duration_since(job.created_at)
             .to_std()
@@ -41,9 +37,22 @@ async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::pr
 
         let should_destroy = match job.status {
             JobStatus::Queued => false,
+            JobStatus::Destroying => {
+                info!(job_id = %job.job_id, reason = "retry_destroy", "reaping job");
+                true
+            }
             JobStatus::Completed | JobStatus::Failed => true,
             JobStatus::Provisioning => {
-                if job_age >= provisioning_timeout {
+                let provision_age = job
+                    .provisioning_started_at
+                    .map(|started| {
+                        chrono::Utc::now()
+                            .signed_duration_since(started)
+                            .to_std()
+                            .unwrap_or(provisioning_timeout)
+                    })
+                    .unwrap_or(provisioning_timeout);
+                if provision_age >= provisioning_timeout {
                     info!(job_id = %job.job_id, reason = "provisioning_timeout", "reaping job");
                     true
                 } else {
@@ -68,7 +77,6 @@ async fn reap_once(jobs: &JobStore, settings: &Settings) -> Result<(), crate::pr
                     false
                 }
             }
-            JobStatus::Destroying => false,
         };
 
         if should_destroy {

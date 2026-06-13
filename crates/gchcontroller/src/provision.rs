@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Stdio;
@@ -7,6 +8,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use gch_core::db::ResolvedTag;
+use tokio::sync::{Mutex, watch};
+use tokio::task::JoinHandle;
+use tokio::time::{sleep, Duration};
 use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -24,6 +28,8 @@ pub enum ProvisionError {
     CloudInit(#[from] crate::cloud_init::CloudInitError),
     #[error("terraform failed: {0}")]
     Terraform(String),
+    #[error("provision cancelled")]
+    Cancelled,
 }
 
 #[derive(Clone)]
@@ -63,6 +69,52 @@ struct TerraformWorkspace<'a> {
     cloud_init: &'a str,
     firewall_id: &'a str,
     ssh_key_ids: &'a [String],
+}
+
+struct ProvisionTaskRegistry {
+    cancel_txs: Mutex<HashMap<Uuid, watch::Sender<bool>>>,
+    tasks: Mutex<HashMap<Uuid, JoinHandle<()>>>,
+}
+
+impl ProvisionTaskRegistry {
+    fn new() -> Self {
+        Self {
+            cancel_txs: Mutex::new(HashMap::new()),
+            tasks: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn register(&self, job_id: Uuid) -> watch::Receiver<bool> {
+        let (tx, rx) = watch::channel(false);
+        self.cancel_txs.lock().await.insert(job_id, tx);
+        rx
+    }
+
+    async fn store_task(&self, job_id: Uuid, handle: JoinHandle<()>) {
+        self.tasks.lock().await.insert(job_id, handle);
+    }
+
+    async fn cancel_and_wait(&self, job_id: Uuid) {
+        if let Some(tx) = self.cancel_txs.lock().await.remove(&job_id) {
+            let _ = tx.send(true);
+        }
+        if let Some(handle) = self.tasks.lock().await.remove(&job_id) {
+            let _ = tokio::time::timeout(Duration::from_secs(120), handle).await;
+        }
+        self.cancel_txs.lock().await.remove(&job_id);
+        sleep(Duration::from_secs(2)).await;
+    }
+
+    async fn unregister(&self, job_id: Uuid) {
+        self.cancel_txs.lock().await.remove(&job_id);
+        self.tasks.lock().await.remove(&job_id);
+    }
+}
+
+fn provision_tasks() -> &'static ProvisionTaskRegistry {
+    use std::sync::OnceLock;
+    static REGISTRY: OnceLock<ProvisionTaskRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(ProvisionTaskRegistry::new)
 }
 
 pub async fn provision_job(
@@ -109,6 +161,7 @@ pub async fn provision_job(
         retry_at,
         queue_attempts: if defer { 1 } else { 0 },
         created_at: Utc::now(),
+        provisioning_started_at: if defer { None } else { Some(Utc::now()) },
         last_heartbeat: None,
         completed_at: None,
         terraform_dir: terraform_dir.clone(),
@@ -222,7 +275,8 @@ async fn start_terraform_for_request(
         let ssh_key_ids = config.ssh_key_ids.clone();
         let provision_req = req.clone();
         let retry_secs = config.provision_queue_retry_secs;
-        tokio::spawn(async move {
+        let cancel_rx = provision_tasks().register(job_id).await;
+        let handle = tokio::spawn(async move {
             let workspace = TerraformWorkspace {
                 module_dir: &module_dir,
                 job_id: &job_id,
@@ -231,14 +285,33 @@ async fn start_terraform_for_request(
                 firewall_id: &firewall_id,
                 ssh_key_ids: &ssh_key_ids,
             };
-            match apply_with_placement_fallbacks(&terraform_dir, &workspace).await {
+            let result =
+                apply_with_placement_fallbacks(&terraform_dir, &workspace, job_id, cancel_rx)
+                    .await;
+            provision_tasks().unregister(job_id).await;
+            match result {
                 Ok((server_type, location)) => {
+                    if job_was_cancelled(&jobs, job_id).await {
+                        warn!(
+                            %job_id,
+                            %server_type,
+                            %location,
+                            "terraform apply completed after job was cancelled; destroying orphan resources"
+                        );
+                        if let Err(e) = destroy_workspace(&terraform_dir).await {
+                            error!(%job_id, error = %e, "failed to destroy orphan resources after late apply");
+                        }
+                        return;
+                    }
                     info!(
                         %job_id,
                         %server_type,
                         %location,
                         "terraform apply succeeded"
                     );
+                }
+                Err(ProvisionError::Cancelled) => {
+                    info!(%job_id, "terraform apply cancelled");
                 }
                 Err(e) => {
                     error!(%job_id, error = %e, "terraform apply failed after all placement fallbacks");
@@ -264,6 +337,7 @@ async fn start_terraform_for_request(
                 }
             }
         });
+        provision_tasks().store_task(job_id, handle).await;
     } else {
         warn!(%job_id, "GCH_PROVISION_ENABLED=false, skipping terraform apply");
     }
@@ -275,13 +349,19 @@ pub async fn destroy_job(
     jobs: &JobStore,
     job_id: Uuid,
 ) -> Result<(), ProvisionError> {
-    let job = jobs.mark_destroying(job_id).await;
-    let Some(job) = job else {
-        return Ok(());
+    let job = match jobs.get(job_id).await {
+        Some(j) if j.status == JobStatus::Destroying => j,
+        _ => match jobs.mark_destroying(job_id).await {
+            Some(j) => j,
+            None => return Ok(()),
+        },
     };
 
+    provision_tasks().cancel_and_wait(job_id).await;
+
     if let Err(e) = destroy_workspace(&job.terraform_dir).await {
-        error!(%job_id, error = %e, "terraform destroy failed");
+        error!(%job_id, error = %e, "terraform destroy failed; will retry");
+        return Ok(());
     }
 
     jobs.remove(job_id).await;
@@ -289,23 +369,37 @@ pub async fn destroy_job(
     Ok(())
 }
 
+async fn job_was_cancelled(jobs: &JobStore, job_id: Uuid) -> bool {
+    match jobs.get(job_id).await {
+        None => true,
+        Some(job) => job.status == JobStatus::Destroying,
+    }
+}
+
 async fn apply_with_placement_fallbacks(
     terraform_dir: &Path,
     workspace: &TerraformWorkspace<'_>,
+    job_id: Uuid,
+    mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<(&'static str, &'static str), ProvisionError> {
     let mut last_err: Option<ProvisionError> = None;
     let mut initialized = false;
 
     for (server_type, location) in PLACEMENT_FALLBACKS {
+        if *cancel_rx.borrow() {
+            return Err(ProvisionError::Cancelled);
+        }
+
         write_terraform_workspace(terraform_dir, workspace, server_type, location)?;
 
         if !initialized {
-            run_terraform(terraform_dir, "init", false).await?;
+            run_terraform(terraform_dir, "init", false, job_id, &mut cancel_rx).await?;
             initialized = true;
         }
 
-        match run_terraform(terraform_dir, "apply", true).await {
+        match run_terraform(terraform_dir, "apply", true, job_id, &mut cancel_rx).await {
             Ok(()) => return Ok((server_type, location)),
+            Err(ProvisionError::Cancelled) => return Err(ProvisionError::Cancelled),
             Err(e) => {
                 warn!(
                     job_id = %workspace.job_id,
@@ -315,7 +409,7 @@ async fn apply_with_placement_fallbacks(
                     "placement failed, trying next fallback"
                 );
                 last_err = Some(e);
-                let _ = run_terraform(terraform_dir, "destroy", true).await;
+                let _ = run_terraform(terraform_dir, "destroy", true, job_id, &mut cancel_rx).await;
             }
         }
     }
@@ -327,7 +421,8 @@ async fn apply_with_placement_fallbacks(
 
 async fn destroy_workspace(terraform_dir: &Path) -> Result<(), ProvisionError> {
     if terraform_dir.join("main.tf").exists() {
-        run_terraform(terraform_dir, "destroy", true).await?;
+        let mut cancel_rx = watch::channel(false).1;
+        run_terraform(terraform_dir, "destroy", true, Uuid::nil(), &mut cancel_rx).await?;
     }
     fs::remove_dir_all(terraform_dir).ok();
     Ok(())
@@ -337,21 +432,26 @@ async fn run_terraform(
     dir: &Path,
     action: &str,
     auto_approve: bool,
+    job_id: Uuid,
+    cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<(), ProvisionError> {
     let hcloud_token = std::env::var("HCLOUD_TOKEN").unwrap_or_default();
 
-    let init = Command::new("terraform")
-        .args(["init", "-input=false", "-no-color"])
-        .current_dir(dir)
-        .env("HCLOUD_TOKEN", &hcloud_token)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
+    if action == "apply" || action == "destroy" {
+        let init = run_terraform_child(
+            dir,
+            &["init", "-input=false", "-no-color"],
+            &hcloud_token,
+            job_id,
+            cancel_rx,
+        )
         .await?;
-
-    if !init.status.success() {
-        let stderr = String::from_utf8_lossy(&init.stderr);
-        return Err(ProvisionError::Terraform(format!("init: {stderr}")));
+        if !init.success() {
+            return Err(ProvisionError::Terraform(format!(
+                "init: {}",
+                init.stderr
+            )));
+        }
     }
 
     let mut args = vec![action, "-input=false", "-no-color"];
@@ -359,22 +459,74 @@ async fn run_terraform(
         args.push("-auto-approve");
     }
 
-    let out = Command::new("terraform")
-        .args(&args)
-        .current_dir(dir)
-        .env("TF_IN_AUTOMATION", "1")
-        .env("HCLOUD_TOKEN", &hcloud_token)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await?;
-
-    if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        return Err(ProvisionError::Terraform(format!("{action}: {stderr}")));
+    let out = run_terraform_child(dir, &args, &hcloud_token, job_id, cancel_rx).await?;
+    if !out.success() {
+        return Err(ProvisionError::Terraform(format!("{action}: {}", out.stderr)));
     }
 
     Ok(())
+}
+
+struct TerraformOutput {
+    success: bool,
+    stderr: String,
+}
+
+impl TerraformOutput {
+    fn success(&self) -> bool {
+        self.success
+    }
+}
+
+async fn run_terraform_child(
+    dir: &Path,
+    args: &[&str],
+    hcloud_token: &str,
+    _job_id: Uuid,
+    cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<TerraformOutput, ProvisionError> {
+    let child = Command::new("terraform")
+        .args(args)
+        .current_dir(dir)
+        .env("TF_IN_AUTOMATION", "1")
+        .env("HCLOUD_TOKEN", hcloud_token)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let pid = child.id();
+    let mut child_task = tokio::spawn(async move { child.wait_with_output().await });
+
+    let output = tokio::select! {
+        biased;
+        _ = async {
+            loop {
+                if cancel_rx.changed().await.is_err() {
+                    return;
+                }
+                if *cancel_rx.borrow() {
+                    return;
+                }
+            }
+        } => {
+            if let Some(pid) = pid {
+                let _ = Command::new("kill")
+                    .arg(pid.to_string())
+                    .status()
+                    .await;
+            }
+            let _ = (&mut child_task).await;
+            return Err(ProvisionError::Cancelled);
+        }
+        out = &mut child_task => {
+            out.map_err(|e| ProvisionError::Terraform(format!("terraform task: {e}")))??
+        }
+    };
+
+    Ok(TerraformOutput {
+        success: output.status.success(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
 }
 
 fn write_terraform_workspace(

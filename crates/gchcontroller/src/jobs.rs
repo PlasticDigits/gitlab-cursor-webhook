@@ -58,6 +58,8 @@ pub struct JobRecord {
     pub retry_at: Option<DateTime<Utc>>,
     pub queue_attempts: u32,
     pub created_at: DateTime<Utc>,
+    /// When the job last entered `Provisioning` (excludes time spent queued).
+    pub provisioning_started_at: Option<DateTime<Utc>>,
     pub last_heartbeat: Option<Instant>,
     pub completed_at: Option<DateTime<Utc>>,
     pub terraform_dir: PathBuf,
@@ -220,6 +222,7 @@ impl JobStore {
             job.phase = Some("queued".to_string());
             job.status_message = Some(reason.to_string());
             job.retry_at = Some(retry_at);
+            job.provisioning_started_at = None;
             job.queue_attempts = job.queue_attempts.saturating_add(1);
             Some(job.clone())
         } else {
@@ -235,6 +238,7 @@ impl JobStore {
             job.status_message = None;
             job.retry_at = None;
             job.runtime_token = None;
+            job.provisioning_started_at = Some(Utc::now());
             Some(job.clone())
         } else {
             None
