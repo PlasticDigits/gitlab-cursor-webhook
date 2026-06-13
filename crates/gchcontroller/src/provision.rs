@@ -393,11 +393,11 @@ async fn apply_with_placement_fallbacks(
         write_terraform_workspace(terraform_dir, workspace, server_type, location)?;
 
         if !initialized {
-            run_terraform(terraform_dir, "init", false, job_id, &mut cancel_rx).await?;
+            run_terraform(terraform_dir, "init", false, job_id, Some(&mut cancel_rx)).await?;
             initialized = true;
         }
 
-        match run_terraform(terraform_dir, "apply", true, job_id, &mut cancel_rx).await {
+        match run_terraform(terraform_dir, "apply", true, job_id, Some(&mut cancel_rx)).await {
             Ok(()) => return Ok((server_type, location)),
             Err(ProvisionError::Cancelled) => return Err(ProvisionError::Cancelled),
             Err(e) => {
@@ -409,7 +409,9 @@ async fn apply_with_placement_fallbacks(
                     "placement failed, trying next fallback"
                 );
                 last_err = Some(e);
-                let _ = run_terraform(terraform_dir, "destroy", true, job_id, &mut cancel_rx).await;
+                let _ =
+                    run_terraform(terraform_dir, "destroy", true, job_id, Some(&mut cancel_rx))
+                        .await;
             }
         }
     }
@@ -421,8 +423,7 @@ async fn apply_with_placement_fallbacks(
 
 async fn destroy_workspace(terraform_dir: &Path) -> Result<(), ProvisionError> {
     if terraform_dir.join("main.tf").exists() {
-        let mut cancel_rx = watch::channel(false).1;
-        run_terraform(terraform_dir, "destroy", true, Uuid::nil(), &mut cancel_rx).await?;
+        run_terraform(terraform_dir, "destroy", true, Uuid::nil(), None).await?;
     }
     fs::remove_dir_all(terraform_dir).ok();
     Ok(())
@@ -433,7 +434,7 @@ async fn run_terraform(
     action: &str,
     auto_approve: bool,
     job_id: Uuid,
-    cancel_rx: &mut watch::Receiver<bool>,
+    mut cancel_rx: Option<&mut watch::Receiver<bool>>,
 ) -> Result<(), ProvisionError> {
     let hcloud_token = std::env::var("HCLOUD_TOKEN").unwrap_or_default();
 
@@ -443,7 +444,7 @@ async fn run_terraform(
             &["init", "-input=false", "-no-color"],
             &hcloud_token,
             job_id,
-            cancel_rx,
+            cancel_rx.as_deref_mut(),
         )
         .await?;
         if !init.success() {
@@ -459,7 +460,8 @@ async fn run_terraform(
         args.push("-auto-approve");
     }
 
-    let out = run_terraform_child(dir, &args, &hcloud_token, job_id, cancel_rx).await?;
+    let out =
+        run_terraform_child(dir, &args, &hcloud_token, job_id, cancel_rx.as_deref_mut()).await?;
     if !out.success() {
         return Err(ProvisionError::Terraform(format!("{action}: {}", out.stderr)));
     }
@@ -483,7 +485,7 @@ async fn run_terraform_child(
     args: &[&str],
     hcloud_token: &str,
     _job_id: Uuid,
-    cancel_rx: &mut watch::Receiver<bool>,
+    cancel_rx: Option<&mut watch::Receiver<bool>>,
 ) -> Result<TerraformOutput, ProvisionError> {
     let child = Command::new("terraform")
         .args(args)
@@ -497,30 +499,36 @@ async fn run_terraform_child(
     let pid = child.id();
     let mut child_task = tokio::spawn(async move { child.wait_with_output().await });
 
-    let output = tokio::select! {
-        biased;
-        _ = async {
-            loop {
-                if cancel_rx.changed().await.is_err() {
-                    return;
+    let output = match cancel_rx {
+        Some(cancel_rx) => tokio::select! {
+            biased;
+            _ = async {
+                loop {
+                    if cancel_rx.changed().await.is_err() {
+                        // Sender gone without signalling cancel — let terraform finish.
+                        std::future::pending::<()>().await;
+                    }
+                    if *cancel_rx.borrow() {
+                        return;
+                    }
                 }
-                if *cancel_rx.borrow() {
-                    return;
+            } => {
+                if let Some(pid) = pid {
+                    let _ = Command::new("kill")
+                        .arg(pid.to_string())
+                        .status()
+                        .await;
                 }
+                let _ = (&mut child_task).await;
+                return Err(ProvisionError::Cancelled);
             }
-        } => {
-            if let Some(pid) = pid {
-                let _ = Command::new("kill")
-                    .arg(pid.to_string())
-                    .status()
-                    .await;
+            out = &mut child_task => {
+                out.map_err(|e| ProvisionError::Terraform(format!("terraform task: {e}")))??
             }
-            let _ = (&mut child_task).await;
-            return Err(ProvisionError::Cancelled);
-        }
-        out = &mut child_task => {
-            out.map_err(|e| ProvisionError::Terraform(format!("terraform task: {e}")))??
-        }
+        },
+        None => (&mut child_task)
+            .await
+            .map_err(|e| ProvisionError::Terraform(format!("terraform task: {e}")))??,
     };
 
     Ok(TerraformOutput {
