@@ -16,6 +16,9 @@ pub struct ControllerConfig {
     pub db_path: PathBuf,
     pub hcloud_token: String,
     pub firewall_id: String,
+    /// Raw SSH key references from env (numeric id, name, or fingerprint). Resolved at startup.
+    pub ssh_key_refs: Vec<String>,
+    /// Resolved numeric Hetzner SSH key IDs passed to Terraform.
     pub ssh_key_ids: Vec<String>,
     pub controller_url: String,
     pub cursor_api_key: String,
@@ -126,13 +129,20 @@ impl ControllerConfig {
         let gitlab_token = env::var("GITLAB_TOKEN")
             .map_err(|_| ConfigError::MissingVar("GITLAB_TOKEN"))?;
 
-        let ssh_key_ids: Vec<String> = env::var("GCH_SSH_KEY_IDS")
+        let mut ssh_key_refs: Vec<String> = env::var("GCH_SSH_KEY_IDS")
             .unwrap_or_default()
             .split(',')
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .collect();
+
+        if let Ok(name) = env::var("GCH_SSH_KEY_NAME") {
+            let name = name.trim();
+            if !name.is_empty() && !ssh_key_refs.iter().any(|r| r == name) {
+                ssh_key_refs.push(name.to_string());
+            }
+        }
 
         let jobs_dir = PathBuf::from(
             env::var("GCH_JOBS_DIR").unwrap_or_else(|_| "/var/lib/gch/jobs".to_string()),
@@ -181,7 +191,8 @@ impl ControllerConfig {
                 db_path,
                 hcloud_token,
                 firewall_id,
-                ssh_key_ids,
+                ssh_key_refs,
+                ssh_key_ids: Vec::new(),
                 controller_url,
                 cursor_api_key,
                 gitlab_token,

@@ -110,6 +110,7 @@ fn test_config() -> Arc<ControllerConfig> {
         db_path: "/tmp/gch-test.db".into(),
         hcloud_token: "test".into(),
         firewall_id: "fw-test".into(),
+        ssh_key_refs: vec![],
         ssh_key_ids: vec![],
         controller_url: "http://127.0.0.1:8080".into(),
         cursor_api_key: "cursor-test".into(),

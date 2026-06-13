@@ -50,6 +50,7 @@ See [`.env.example`](.env.example). Required:
 
 - `ALLOWED_USERS` — comma-separated GitLab usernames (fail-closed if empty)
 - `HCLOUD_TOKEN`, `GCH_FIREWALL_ID`, `GCH_CONTROLLER_URL`
+- `GCH_SSH_KEY_IDS` — SSH keys for agent VMs (numeric id, key name, or fingerprint; see `.env.example`)
 - `CURSOR_API_KEY`, `GITLAB_TOKEN`
 
 ### SQLite (`gchconfig`)

@@ -348,6 +348,28 @@ fn run_doctor(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
         println!("[OK] HCLOUD_TOKEN set");
     }
 
+    let mut ssh_refs: Vec<String> = std::env::var("GCH_SSH_KEY_IDS")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    if let Ok(name) = std::env::var("GCH_SSH_KEY_NAME") {
+        let name = name.trim();
+        if !name.is_empty() && !ssh_refs.iter().any(|r| r == name) {
+            ssh_refs.push(name.to_string());
+        }
+    }
+    if ssh_refs.is_empty() {
+        println!(
+            "[WARN] GCH_SSH_KEY_IDS not set — agent VMs get a Hetzner root password instead of SSH key auth"
+        );
+        ok = false;
+    } else {
+        println!("[OK] ssh keys configured: {}", ssh_refs.join(", "));
+    }
+
     for bin in ["terraform"] {
         match Command::new(bin)
             .arg("version")

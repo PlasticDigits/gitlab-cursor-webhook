@@ -18,13 +18,36 @@ async fn main() {
         )
         .init();
 
-    let (config, db) = match ControllerConfig::from_env() {
+    let (mut config, db) = match ControllerConfig::from_env() {
         Ok(pair) => pair,
         Err(e) => {
             eprintln!("configuration error: {e}");
             std::process::exit(1);
         }
     };
+
+    match gchcontroller::hetzner::resolve_ssh_key_ids(
+        &config.hcloud_token,
+        &config.ssh_key_refs,
+    )
+    .await
+    {
+        Ok(ids) => {
+            if ids.is_empty() {
+                tracing::warn!(
+                    "GCH_SSH_KEY_IDS / GCH_SSH_KEY_NAME not set — agent VMs will be created \
+                     without SSH keys (Hetzner emails a root password instead)"
+                );
+            } else {
+                tracing::info!(ssh_key_ids = ?ids, "resolved Hetzner SSH keys for provisioning");
+            }
+            config.ssh_key_ids = ids;
+        }
+        Err(e) => {
+            eprintln!("failed to resolve Hetzner SSH keys: {e}");
+            std::process::exit(1);
+        }
+    }
 
     let settings = config.settings.clone();
     let config = Arc::new(config);

@@ -199,6 +199,7 @@ gchconfig setting firewall_id <output_id>
 Run `gchcontroller` on a small always-on VM (e.g. CX23) with:
 
 - `HCLOUD_TOKEN`, `GCH_FIREWALL_ID`, `GCH_CONTROLLER_URL`
+- `GCH_SSH_KEY_IDS` — Hetzner SSH key name, fingerprint, or numeric id (e.g. `admin-ceramic`)
 - `CURSOR_API_KEY`, `GITLAB_TOKEN`
 - `ALLOWED_USERS` (per-project webhook signing tokens are stored in SQLite via `gchconfig`)
 - Terraform CLI installed
