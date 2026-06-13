@@ -49,9 +49,9 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
 ## Environment
 
-- **Rabby** wallet extension is installed in the browser profile — use as documented in project docs for dapp / E2E flows.
-- **Anvil** (`~/.foundry/bin/anvil` or project `docker-compose.anvil.yml`) provides the local EVM chain — start it per project docs before wallet or frontend tests.
-- **Foundry** (`forge test`, `cast`, etc.) is available for contract verification.
+- **Rabby** extension at `/opt/cursor/browser-extensions/rabby`; profile `/opt/cursor/chrome-profile-rabby`. Headed Chromium only (`xvfb-run` or `DISPLAY=:99`). See `docs/testing/rabby-cloud-agent-qa.md`.
+- **Anvil** via `~/.foundry/bin/anvil` — start with `--code-size-limit 524288` before onchain or E2E tests (`docs/testing/e2e-anvil.md`, `scripts/e2e-anvil.sh`).
+- **Foundry** (`forge test`, `cast`, etc.) for contract verification. Native Postgres for indexer on port **5433** (`scripts/verify-cloud-postgres.sh`).
 - Use `$GITLAB_TOKEN` for `glab`. Issue comments: `-m "$(cat file.md)"` only (no `--body-file` on 1.102.x).
 
 ## Cleanup

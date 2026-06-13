@@ -40,8 +40,8 @@ From this issue and its comments, open GitLab issues only for **approved** items
 
 ## Environment
 
-- **Foundry** (`forge test`, `cast`) and **Anvil** per project docs.
-- **Rabby** is available for dapp / e2e flows.
+- **Foundry** (`forge test`, `cast`) and **Anvil** (`--code-size-limit 524288`) per `docs/testing/e2e-anvil.md`.
+- **Rabby** at `/opt/cursor/browser-extensions/rabby`; headed Chromium only — `docs/testing/rabby-cloud-agent-qa.md`.
 - Use `$GITLAB_TOKEN` for `glab`. Issue comments: `-m "$(cat file.md)"` only (no `--body-file` on 1.102.x).
 
 ## Cleanup

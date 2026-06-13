@@ -27,15 +27,31 @@ lsb_release -ds    # expect Ubuntu 24.04.x
 
 ### 1b. Prerequisites (project repo)
 
-`gch-cloud-setup.sh` is run from the **GitLab project** clone, not from this repo. Before building, ensure `plasticdigits/cl8y-dex-terraclassic` (or yieldomega) on `main` includes:
+`gch-cloud-setup.sh` is run from the **GitLab project** clone, not from this repo. Before building, ensure the project on `main` includes the files below. Copy from `gitlab-cursor-webhook/docs/examples/<project>/` if the project repo is behind.
+
+**cl8y-dex-terraclassic (Terra / Keplr / LocalTerra)**
 
 | File | Requirement |
 |------|-------------|
-| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; after `npm ci`, `playwright install` + `install-deps` |
+| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; after `npm ci`, `playwright install` + `install-deps` in `frontend-dapp` |
 | `gch-cloud-init-runner.sh` | `jq -r '.git_ref // empty'` (not bare `empty` as filename) |
+| `gch-golden-image-finalize.md` | Keplr + LocalTerra finalize tasks |
 | `scripts/setup-cloud-agent-localterra.sh` | `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE` before `playwright install` |
 
-Copy from `gitlab-cursor-webhook/docs/examples/cl8y-dex-terraclassic/` if the project repo is behind.
+**yieldomega (EVM / Rabby / Anvil)**
+
+| File | Requirement |
+|------|-------------|
+| `gch-cloud-setup.sh` | `/etc/profile.d/gch-agent.sh`, agent `.bashrc` sources `/etc/gch/job.env`; calls `scripts/bootstrap-*.sh` |
+| `gch-cloud-init.sh` | Sources `gch-cloud-init-runner.sh`; Foundry on PATH |
+| `gch-cloud-init-runner.sh` | `jq -r '.git_ref // empty'` |
+| `gch-golden-image-finalize.md` | Rabby (`/opt/cursor/…`) + Anvil finalize tasks |
+| `gch-agent-idle-wrap.py` | Agent idle timeout wrapper |
+| `scripts/bootstrap-dev.sh` | Git submodules + `frontend/` `npm ci` |
+| `scripts/bootstrap-cloud-vm-toolchain.sh` | Foundry, Rabby extension, glab, Docker |
+| `scripts/bootstrap-cloud-postgres-native.sh` | Indexer Postgres on port 5433 |
+| `scripts/bootstrap-cloud-agent.sh` | Playwright from `frontend/` lock + Rabby wallet import |
+| `scripts/install-browser-extensions.sh` | Unpacked Rabby under `/opt/cursor/browser-extensions/rabby` |
 
 ### 2. Clone project and run setup
 
@@ -73,11 +89,15 @@ Optional: override the finalize model with `GCH_GOLDEN_IMAGE_MODEL=composer-2.5-
 
 After setup, review `/home/agent/.gch/golden-image-verify.log`.
 
-**Playwright browsers (Terra Classic / `frontend-dapp`):** `gch-cloud-setup.sh` runs `npm ci` in `frontend-dapp`, installs browsers from that package’s locked `@playwright/test` version, then `npx playwright install-deps` for apt libraries (GTK, GStreamer, etc.).
+**Playwright browsers (cl8y-dex-terraclassic / `frontend-dapp`):** `gch-cloud-setup.sh` runs `npm ci` in `frontend-dapp`, installs browsers from that package’s locked `@playwright/test` version, then `npx playwright install-deps` for apt libraries (GTK, GStreamer, etc.).
 
-Browsers are cached under `~/.cache/ms-playwright/` (not `frontend-dapp/node_modules/.cache/`). Use full `playwright install` — not `install chromium` alone — so `chromium_headless_shell` matches e2e tests.
+**Playwright + Rabby (yieldomega / `frontend/`):** `gch-cloud-setup.sh` runs `scripts/bootstrap-dev.sh` then `scripts/bootstrap-cloud-agent.sh`, which installs Playwright Chromium from `frontend/package-lock.json`. Rabby lives at `/opt/cursor/browser-extensions/rabby` (not `~/.gch/extensions`).
 
-If setup was interrupted or `frontend-dapp` dependencies changed, re-run as `agent` before snapshot:
+Browsers are cached under `~/.cache/ms-playwright/` (not `frontend/node_modules/.cache/`). Use full `playwright install` — not `install chromium` alone — so `chromium_headless_shell` matches e2e tests.
+
+If setup was interrupted or frontend dependencies changed, re-run as `agent` before snapshot:
+
+**Terra Classic (`frontend-dapp`):**
 
 ```bash
 sudo -u agent bash -lc '
@@ -91,9 +111,21 @@ sudo -u agent bash -lc '
 '
 ```
 
-Avoid `with-node.sh` for Playwright on Node 24.16+ — it can hang during browser zip extraction. Pin `.nvmrc` to `24.15.0` or upgrade `@playwright/test` to ≥ 1.60.0.
+**YieldOmega (`frontend/`):**
 
-Do not install Playwright from a separate `~/.gch/playwright` sandbox — that can pin a different browser build than `frontend-dapp` and break e2e.
+```bash
+sudo -u agent bash -lc '
+  export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
+  cd /home/agent/workspace/frontend
+  npx playwright install chromium
+  sudo -E env "PATH=$PATH" npx playwright install-deps chromium
+  bash /home/agent/workspace/scripts/bootstrap-cloud-agent.sh
+'
+```
+
+Avoid `with-node.sh` for Playwright on Node 24.16+ — it can hang during browser zip extraction. Pin `.nvmrc` to `24.15.0` or upgrade `@playwright/test` to ≥ 1.60.0 (cl8y only).
+
+Do not install Playwright from a separate `~/.gch/playwright` sandbox — that can pin a different browser build than the frontend lock and break e2e.
 
 ### 3. Verify agent user
 
@@ -119,10 +151,25 @@ grep "git_ref" /home/agent/gch-cloud-init-runner.sh
 
 test -f /etc/profile.d/gch-agent.sh
 grep -q 'GCH job secrets' /home/agent/.bashrc
-grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE /home/agent/workspace/scripts/setup-cloud-agent-localterra.sh
+```
 
-# Playwright browsers for frontend-dapp (default cache: ~/.cache/ms-playwright)
+**cl8y-dex-terraclassic only:**
+
+```bash
+grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE /home/agent/workspace/scripts/setup-cloud-agent-localterra.sh
 sudo -u agent bash -lc 'ls "$HOME/.cache/ms-playwright"/chromium-* "$HOME/.cache/ms-playwright"/chromium_headless_shell-* >/dev/null'
+```
+
+**yieldomega only:**
+
+```bash
+test -f /opt/cursor/browser-extensions/rabby/manifest.json
+sudo -u agent bash -lc 'forge --version && anvil --version'
+sudo -u agent bash -lc 'bash /home/agent/workspace/scripts/verify-rabby-playwright-injection.sh'
+sudo -u agent bash -lc 'bash /home/agent/workspace/scripts/verify-cloud-postgres.sh'
+sudo -u agent bash -lc 'ls "$HOME/.cache/ms-playwright"/chromium-* >/dev/null'
+# optional strong signal:
+# sudo -u agent bash -lc 'cd /home/agent/workspace && bash scripts/e2e-anvil.sh'
 ```
 
 If `apt upgrade` installed a new kernel during setup, **reboot** and re-run the smoke checks above before cleanup:
@@ -139,6 +186,13 @@ Optional (Terra Classic): stop job-local docker so the snapshot is clean:
 ```bash
 sudo -u agent bash -lc 'cd /home/agent/workspace && make stop' || true
 sudo -u agent docker ps   # expect empty
+```
+
+Optional (yieldomega): stop any running Anvil or preview servers:
+
+```bash
+sudo -u agent pkill -f 'anvil.*8545' 2>/dev/null || true
+sudo -u agent pkill -f 'vite preview' 2>/dev/null || true
 ```
 
 ### 4. Pre-snapshot cleanup
@@ -166,12 +220,14 @@ On the controller host, point all three tags at the new snapshot ID:
 ```bash
 source /opt/gitlab-cursor-webhook/scripts/gch-controller-shell.sh
 SNAPSHOT=<new_id>
-run_gch tag add --project cl8y-dex-terraclassic --name security   --snapshot "$SNAPSHOT"
-run_gch tag add --project cl8y-dex-terraclassic --name verify     --snapshot "$SNAPSHOT"
-run_gch tag add --project cl8y-dex-terraclassic --name implement  --snapshot "$SNAPSHOT"
+run_gch tag add --project <project> --name security   --snapshot "$SNAPSHOT"
+run_gch tag add --project <project> --name verify     --snapshot "$SNAPSHOT"
+run_gch tag add --project <project> --name implement  --snapshot "$SNAPSHOT"
 ```
 
-Full webhook and signing-token steps: [runbook-cl8y-dex-terraclassic.md](runbook-cl8y-dex-terraclassic.md).
+Example: `--project yieldomega` or `--project cl8y-dex-terraclassic`.
+
+Full webhook and signing-token steps: [runbook-cl8y-dex-terraclassic.md](runbook-cl8y-dex-terraclassic.md) (same `gchconfig` pattern for yieldomega).
 
 Ensure controller `GITLAB_TOKEN` in `/etc/gitlab-cursor-webhook.env` is valid for `glab` (not baked into the snapshot).
 

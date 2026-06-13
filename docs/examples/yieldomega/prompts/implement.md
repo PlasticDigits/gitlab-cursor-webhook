@@ -47,8 +47,8 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
 ## Environment
 
-- **Rabby** wallet extension is installed in the browser profile for dapp flows.
-- **Anvil** provides the local EVM chain — start per project docs before onchain or E2E tests.
+- **Rabby** at `/opt/cursor/browser-extensions/rabby`; profile `/opt/cursor/chrome-profile-rabby`. Headed Chromium only — see `docs/testing/rabby-cloud-agent-qa.md`.
+- **Anvil** via `~/.foundry/bin/anvil` with `--code-size-limit 524288` — see `docs/testing/e2e-anvil.md`.
 - Run contract tests with **Foundry** (`forge test`, `forge script`, etc.) as documented.
 - Use `$GITLAB_TOKEN` for `glab`. Issue comments: `-m "$(cat file.md)"` only (no `--body-file` on 1.102.x).
 

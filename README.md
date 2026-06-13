@@ -105,7 +105,7 @@ Example project scripts:
 - [docs/examples/yieldomega/](docs/examples/yieldomega/) — EVM / Foundry / Rabby
 - [docs/examples/cl8y-dex-terraclassic/](docs/examples/cl8y-dex-terraclassic/) — Terra / Keplr
 
-Copy `gch-cloud-setup.sh`, `gch-cloud-init.sh`, `gch-cloud-init-runner.sh`, `gch-golden-image-finalize.md`, and `prompts/` into each project repo before building snapshots.
+Copy `gch-cloud-setup.sh`, `gch-cloud-init.sh`, `gch-cloud-init-runner.sh`, `gch-agent-idle-wrap.py`, `gch-golden-image-finalize.md`, and `prompts/` into each project repo before building snapshots.
 
 ## Terraform
 
