@@ -175,6 +175,18 @@ fi
 
 # Postgres is started by bootstrap-cloud-vm-toolchain.sh (do not run bootstrap-cloud-postgres-native.sh again as root — psql defaults to 5432 after port is moved to 5433).
 
+if [[ -d "${WORKSPACE}/indexer" ]]; then
+  echo "==> Indexer prebuild (cargo registry + target cache for job VMs)"
+  _agent_sh bash -lc "
+    set -euo pipefail
+    source /usr/local/cargo/env 2>/dev/null || true
+    cd '${WORKSPACE}/indexer'
+    cargo fetch
+    cargo clippy --all-targets -- -D warnings
+    cargo test --no-run
+  "
+fi
+
 if [[ -f "${WORKSPACE}/scripts/bootstrap-cloud-agent.sh" ]]; then
   echo "==> Playwright + Rabby"
   if ! pgrep -x Xvfb >/dev/null 2>&1; then
