@@ -16,7 +16,7 @@ GCH_GOLDEN_IMAGE_MODEL="${GCH_GOLDEN_IMAGE_MODEL:-composer-2.5}"
 FINALIZE_PROMPT="${SCRIPT_DIR}/gch-golden-image-finalize.md"
 
 _agent_sh() {
-  sudo -u "${AGENT_USER}" env PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 "$@"
+  sudo -u "${AGENT_USER}" "$@"
 }
 
 echo "==> Base packages"
@@ -100,13 +100,6 @@ cat >"${AGENT_HOME}/.cursor/cli-config.json" <<'EOF'
 EOF
 chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.cursor"
 chmod 600 "${AGENT_HOME}/.cursor/cli-config.json"
-
-echo "==> GCH agent env (system + agent shell)"
-cat >/etc/profile.d/gch-agent.sh <<'EOF'
-# Playwright: no ubuntu26.04-x64 build yet; use 24.04 userspace on golden images.
-export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
-EOF
-chmod 644 /etc/profile.d/gch-agent.sh
 
 touch "${AGENT_HOME}/.bashrc"
 if ! grep -q 'GCH job secrets' "${AGENT_HOME}/.bashrc"; then
@@ -213,7 +206,6 @@ fi
 sudo -u "${AGENT_USER}" env \
   CURSOR_API_KEY="${CURSOR_API_KEY}" \
   DISPLAY=:99 \
-  PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 \
   bash -lc "
     set -euo pipefail
     cd '${WORKSPACE}'

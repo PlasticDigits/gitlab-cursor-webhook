@@ -14,7 +14,6 @@ Complete all verification below and write the golden-image report. Use passwordl
      mkdir -p /home/agent/.gch
      export PATH="$HOME/.foundry/bin:$PATH"
      export YIELDOMEGA_GOLDEN_IMAGE=1
-     export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
      cd /home/agent/workspace
      unset KEY_EVM_1 KEY_EVM_2 KEY_EVM_3 ADDR_EVM_1 ADDR_EVM_2 ADDR_EVM_3 EVM_DEV_ADDRS \
        VITE_TIME_ARENA_ADDRESS VITE_INDEXER_URL || true

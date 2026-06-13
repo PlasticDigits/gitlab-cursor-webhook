@@ -104,13 +104,6 @@ EOF
 chown -R "${AGENT_USER}:${AGENT_USER}" "${AGENT_HOME}/.cursor"
 chmod 600 "${AGENT_HOME}/.cursor/cli-config.json"
 
-echo "==> GCH agent env (system + agent shell)"
-cat >/etc/profile.d/gch-agent.sh <<'EOF'
-# Playwright: no ubuntu26.04-x64 build yet; use 24.04 userspace on golden images.
-export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
-EOF
-chmod 644 /etc/profile.d/gch-agent.sh
-
 touch "${AGENT_HOME}/.bashrc"
 if ! grep -q 'GCH job secrets' "${AGENT_HOME}/.bashrc"; then
   cat >>"${AGENT_HOME}/.bashrc" <<'EOF'
@@ -180,12 +173,10 @@ if [[ -d "${WORKSPACE}/frontend-dapp" ]]; then
   echo "==> Frontend Playwright browsers"
   if [[ -f "${WORKSPACE}/scripts/with-node.sh" ]]; then
     _agent_nvm_sh "
-      export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
       bash '${WORKSPACE}/scripts/with-node.sh' --cwd frontend-dapp -- npx playwright install
     "
   else
     _agent_nvm_sh "
-      export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
       cd '${WORKSPACE}/frontend-dapp' && npx playwright install
     "
   fi
@@ -214,7 +205,6 @@ fi
 sudo -u "${AGENT_USER}" env \
   CURSOR_API_KEY="${CURSOR_API_KEY}" \
   DISPLAY=:99 \
-  PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 \
   bash -lc "
     set -euo pipefail
     cd '${WORKSPACE}'

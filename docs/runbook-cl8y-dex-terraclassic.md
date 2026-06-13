@@ -5,8 +5,8 @@ Register `plasticdigits/cl8y-dex-terraclassic` on the controller with all three 
 Prerequisites:
 
 - **Recent build** of `gchconfig` and `gchcontroller` (includes per-project `set-signing-token`). If you see `unrecognized subcommand 'set-signing-token'`, rebuild and redeploy — see [§0. Build and deploy](#0-build-and-deploy).
-- Controller host with `gchcontroller` running (see [admin-golden-image.md](admin-golden-image.md))
-- Golden snapshot built for Terra Classic (same doc, §2–5)
+- Controller host with `gchcontroller` running (see [README](../README.md) — Configuration)
+- Golden snapshot built for Terra Classic ([admin-golden-image.md](admin-golden-image.md))
 - `/etc/gitlab-cursor-webhook.env` loaded by systemd (`EnvironmentFile=` in the unit)
 - `gchconfig` and repo at `/opt/gitlab-cursor-webhook`
 
@@ -139,5 +139,5 @@ journalctl -u gitlab-cursor-webhook.service -n 30 --no-pager
 
 ## Related
 
-- Golden image: [admin-golden-image.md](admin-golden-image.md) (Terra example in §2)
+- Golden image builder: [admin-golden-image.md](admin-golden-image.md)
 - Example scripts and prompts: [examples/cl8y-dex-terraclassic/](examples/cl8y-dex-terraclassic/)
