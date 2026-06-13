@@ -46,6 +46,7 @@ lsb_release -ds    # expect Ubuntu 24.04.x
 | `gch-cloud-init.sh` | Sources `gch-cloud-init-runner.sh`; Foundry on PATH |
 | `gch-cloud-init-runner.sh` | `jq -r '.git_ref // empty'` |
 | `gch-golden-image-finalize.md` | Rabby (`/opt/cursor/…`) + Anvil finalize tasks |
+| `gch-golden-image-e2e-anvil.md` | **Required** second session: `e2e-anvil.sh` via background + poll |
 | `gch-agent-idle-wrap.py` | Agent idle timeout wrapper |
 | `scripts/bootstrap-dev.sh` | Git submodules + `frontend/` `npm ci` |
 | `scripts/bootstrap-cloud-vm-toolchain.sh` | Foundry, Rabby extension, glab, Docker |
@@ -189,8 +190,8 @@ sudo -u agent env DISPLAY=:99 PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 
   YIELDOMEGA_SKIP_RABBY_WALLET_IMPORT=1 YIELDOMEGA_SKIP_RABBY_INJECTION_VERIFY=1 \
   bash -lc 'bash /home/agent/workspace/scripts/bootstrap-cloud-agent.sh'
 
-# Run finalize agent (writes /home/agent/.gch/golden-image-verify.log)
-# Use stream-json + stream-partial-output so progress is visible (text format buffers silently).
+# Run finalize agent (writes remaining checks to golden-image-verify.log)
+# e2e-anvil.sh already ran above in shell — do NOT run it again in the agent (shell-tool ~10 min → exit 143).
 export CURSOR_API_KEY='your-key'
 if ! pgrep -x Xvfb >/dev/null 2>&1; then Xvfb :99 -screen 0 1920x1080x24 & sleep 1; fi
 # Optional: fetch stream formatter if missing (golden-yieldomega builder)
