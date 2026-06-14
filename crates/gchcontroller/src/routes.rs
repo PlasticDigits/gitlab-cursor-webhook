@@ -596,6 +596,16 @@ struct CompleteBody {
     exit_code: Option<i32>,
     #[serde(default)]
     message: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    idle_kind: Option<String>,
+    #[serde(default)]
+    last_stream_event: Option<String>,
+    #[serde(default)]
+    idle_secs: Option<u64>,
+    #[serde(default)]
+    max_secs: Option<u64>,
 }
 
 async fn complete_job(
@@ -607,14 +617,31 @@ async fn complete_job(
     let Some(token) = bearer_token(&headers) else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
-    if state.jobs.verify_token(job_id, &token).await.is_none() {
+    let Some(job) = state.jobs.verify_token(job_id, &token).await else {
         return StatusCode::UNAUTHORIZED.into_response();
-    }
+    };
 
     let success = body.status.eq_ignore_ascii_case("success");
-    let msg = body
-        .message
-        .or_else(|| body.exit_code.map(|c| format!("exit_code={c}")));
+    let msg = body.message.clone().or_else(|| {
+        body.exit_code.map(|c| format!("exit_code={c}"))
+    });
+
+    info!(
+        job_id = %job_id,
+        iid = job.iid,
+        tag = %job.tag,
+        project = %job.project_gitlab_path,
+        object_kind = %job.object_kind,
+        success,
+        exit_code = ?body.exit_code,
+        reason = body.reason.as_deref().unwrap_or("unknown"),
+        idle_kind = ?body.idle_kind,
+        last_stream_event = ?body.last_stream_event,
+        idle_secs = ?body.idle_secs,
+        max_secs = ?body.max_secs,
+        message = ?body.message,
+        "job complete"
+    );
 
     if state.jobs.mark_complete(job_id, success, msg).await.is_some() {
         // Reaper will destroy; trigger async destroy for faster cleanup

@@ -13,13 +13,13 @@ use axum::{
     http::{HeaderMap, Request, StatusCode},
 };
 use gch_core::{db::Database, dedup::DedupCache};
+use gch_core::db::Settings;
 use gchcontroller::{
     admission::ProvisionAdmission,
     config::ControllerConfig,
     jobs::JobStore,
     routes::{self, AppState},
 };
-use gch_core::db::Settings;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use standardwebhooks::{
@@ -360,6 +360,68 @@ async fn job_api_requires_bearer_token() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn complete_accepts_reason_metadata() {
+    let state = test_state();
+    let job_id = uuid::Uuid::new_v4();
+    let token = "runtime-test-token";
+    state
+        .jobs
+        .insert(JobRecord {
+            job_id,
+            token_hash: JobStore::hash_token(token),
+            project_gitlab_path: "PlasticDigits/yieldomega".into(),
+            tag: "verify".into(),
+            iid: 311,
+            object_kind: "issue".into(),
+            prompt: "verify".into(),
+            model: "composer-2.5".into(),
+            hetzner_snapshot_id: "snap".into(),
+            workspace_path: "/home/agent/workspace".into(),
+            git_ref: None,
+            status: JobStatus::Running,
+            phase: Some("agent".into()),
+            status_message: None,
+            runtime_token: Some(token.into()),
+            retry_at: None,
+            queue_attempts: 0,
+            created_at: Utc::now(),
+            provisioning_started_at: None,
+            last_heartbeat: None,
+            completed_at: None,
+            terraform_dir: std::env::temp_dir().join(job_id.to_string()),
+            server_id: None,
+        })
+        .await;
+
+    let app = routes::router(state);
+    let body = serde_json::json!({
+        "status": "success",
+        "exit_code": 0,
+        "reason": "idle_timeout",
+        "idle_kind": "short",
+        "last_stream_event": "thinking",
+        "idle_secs": 300,
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/jobs/{job_id}/complete"))
+                .header("Authorization", format!("Bearer {token}"))
+                .header("Content-Type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({ "status": "ok" })
+    );
 }
 
 #[tokio::test]

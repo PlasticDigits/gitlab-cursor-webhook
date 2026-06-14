@@ -50,10 +50,27 @@ post_status() {
 post_complete() {
   local status="$1"
   local exit_code="${2:-0}"
+  local meta_file="${GCH_COMPLETE_META_FILE:-/tmp/gch-agent-complete-meta.json}"
+  local payload
+
+  if [[ -f "${meta_file}" ]]; then
+    payload="$(jq -n \
+      --arg status "${status}" \
+      --argjson exit_code "${exit_code}" \
+      --slurpfile meta "${meta_file}" \
+      '${meta[0]} + {status: $status, exit_code: $exit_code}')"
+    rm -f "${meta_file}"
+  else
+    payload="$(jq -n \
+      --arg status "${status}" \
+      --argjson exit_code "${exit_code}" \
+      '{status: $status, exit_code: $exit_code, reason: "agent_exit"}')"
+  fi
+
   curl -sf -X POST \
     -H "Authorization: Bearer ${JOB_RUNTIME_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "{\"status\":\"${status}\",\"exit_code\":${exit_code}}" \
+    -d "${payload}" \
     "${GCH_CONTROLLER_URL}/api/jobs/${GCH_JOB_ID}/complete" \
     >/dev/null || true
 }
@@ -160,7 +177,7 @@ run_cursor_agent() {
   # Long idle: no stream-json while a shell command runs (playwright, npm, etc.).
   local idle_secs="${GCH_AGENT_IDLE_TIMEOUT_SECS:-1200}"
   # Short idle: after thinking/tool_call completed, CLI hang is likely if still silent.
-  local idle_after_thinking_secs="${GCH_AGENT_IDLE_AFTER_THINKING_SECS:-60}"
+  local idle_after_thinking_secs="${GCH_AGENT_IDLE_AFTER_THINKING_SECS:-300}"
   local max_secs="${GCH_AGENT_MAX_TIMEOUT_SECS:-10800}"
   local agent_cmd=(
     agent -p "${prompt}"

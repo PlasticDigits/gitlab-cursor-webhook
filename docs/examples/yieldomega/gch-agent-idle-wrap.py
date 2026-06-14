@@ -11,9 +11,13 @@ import subprocess
 import sys
 import time
 
+META_FILE = os.environ.get(
+    "GCH_COMPLETE_META_FILE", "/tmp/gch-agent-complete-meta.json"
+)
+
 
 def classify_line(line: bytes) -> str:
-    """Return 'short_idle_arm' or 'activity'."""
+    """Return activity kind for idle tracking."""
     stripped = line.strip()
     if not stripped:
         return "activity"
@@ -21,14 +25,14 @@ def classify_line(line: bytes) -> str:
         obj = json.loads(stripped)
     except json.JSONDecodeError:
         if b'"type":"thinking"' in stripped and b'"subtype":"completed"' in stripped:
-            return "short_idle_arm"
+            return "short_idle_thinking"
         if b'"type":"tool_call"' in stripped and b'"subtype":"completed"' in stripped:
-            return "short_idle_arm"
+            return "short_idle_tool_call"
         return "activity"
     if obj.get("type") == "thinking" and obj.get("subtype") == "completed":
-        return "short_idle_arm"
+        return "short_idle_thinking"
     if obj.get("type") == "tool_call" and obj.get("subtype") == "completed":
-        return "short_idle_arm"
+        return "short_idle_tool_call"
     return "activity"
 
 
@@ -39,6 +43,11 @@ def feed_lines(buf: bytes, chunk: bytes) -> tuple[bytes, list[str]]:
         line, buf = buf.split(b"\n", 1)
         kinds.append(classify_line(line))
     return buf, kinds
+
+
+def write_complete_meta(meta: dict) -> None:
+    with open(META_FILE, "w", encoding="utf-8") as f:
+        json.dump(meta, f)
 
 
 def main() -> int:
@@ -72,6 +81,7 @@ def main() -> int:
     last_output = time.monotonic()
     saw_output = False
     use_short_idle = False
+    last_short_idle_source: str | None = None
     line_buf = b""
     fd = proc.stdout.fileno()
 
@@ -81,6 +91,12 @@ def main() -> int:
             proc.kill()
             proc.wait(timeout=30)
             print("gch-agent-idle-wrap: max runtime exceeded", file=sys.stderr)
+            write_complete_meta(
+                {
+                    "reason": "max_runtime",
+                    "max_secs": max_secs,
+                }
+            )
             return 124
 
         idle_limit = idle_after_thinking if use_short_idle else idle_long
@@ -90,9 +106,13 @@ def main() -> int:
             chunk = os.read(fd, 65536)
             if chunk:
                 line_buf, kinds = feed_lines(line_buf, chunk)
-                if kinds:
-                    if kinds[-1] == "short_idle_arm":
+                for kind in kinds:
+                    if kind == "short_idle_thinking":
                         use_short_idle = True
+                        last_short_idle_source = "thinking"
+                    elif kind == "short_idle_tool_call":
+                        use_short_idle = True
+                        last_short_idle_source = "tool_call"
                     else:
                         use_short_idle = False
 
@@ -111,11 +131,20 @@ def main() -> int:
             and proc.poll() is None
             and (time.monotonic() - last_output) >= idle_limit
         ):
-            label = "short idle" if use_short_idle else "long idle"
+            idle_kind = "short" if use_short_idle else "long"
+            label = f"{idle_kind} idle"
             print(
                 f"gch-agent-idle-wrap: no output for {idle_limit}s ({label}); stopping agent",
                 file=sys.stderr,
             )
+            meta: dict[str, object] = {
+                "reason": "idle_timeout",
+                "idle_kind": idle_kind,
+                "idle_secs": idle_limit,
+            }
+            if use_short_idle and last_short_idle_source:
+                meta["last_stream_event"] = last_short_idle_source
+            write_complete_meta(meta)
             proc.send_signal(signal.SIGTERM)
             try:
                 proc.wait(timeout=30)
