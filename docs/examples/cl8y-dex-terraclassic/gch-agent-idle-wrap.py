@@ -27,12 +27,18 @@ def classify_line(line: bytes) -> str:
         if b'"type":"thinking"' in stripped and b'"subtype":"completed"' in stripped:
             return "short_idle_thinking"
         if b'"type":"tool_call"' in stripped and b'"subtype":"completed"' in stripped:
-            return "short_idle_tool_call"
+            return "tool_call_completed"
+        if b'"type":"tool_call"' in stripped and b'"subtype":"started"' in stripped:
+            return "tool_call_started"
         return "activity"
     if obj.get("type") == "thinking" and obj.get("subtype") == "completed":
         return "short_idle_thinking"
-    if obj.get("type") == "tool_call" and obj.get("subtype") == "completed":
-        return "short_idle_tool_call"
+    if obj.get("type") == "tool_call":
+        subtype = obj.get("subtype")
+        if subtype == "completed":
+            return "tool_call_completed"
+        if subtype == "started":
+            return "tool_call_started"
     return "activity"
 
 
@@ -43,6 +49,42 @@ def feed_lines(buf: bytes, chunk: bytes) -> tuple[bytes, list[str]]:
         line, buf = buf.split(b"\n", 1)
         kinds.append(classify_line(line))
     return buf, kinds
+
+
+def apply_stream_kinds(
+    kinds: list[str],
+    in_flight_tools: int,
+    use_short_idle: bool,
+    last_short_idle_source: str | None,
+) -> tuple[int, bool, str | None]:
+    """Update idle state from parsed stream-json event kinds."""
+    for kind in kinds:
+        if kind == "tool_call_started":
+            in_flight_tools += 1
+        elif kind == "tool_call_completed":
+            in_flight_tools = max(0, in_flight_tools - 1)
+            if in_flight_tools == 0:
+                use_short_idle = True
+                last_short_idle_source = "tool_call"
+        elif kind == "short_idle_thinking":
+            if in_flight_tools == 0:
+                use_short_idle = True
+                last_short_idle_source = "thinking"
+    return in_flight_tools, use_short_idle, last_short_idle_source
+
+
+def idle_limit_secs(
+    in_flight_tools: int,
+    use_short_idle: bool,
+    idle_long: int,
+    idle_after_thinking: int,
+) -> int:
+    """Long idle while any tool is in flight (e.g. forge test with silent stdout)."""
+    if in_flight_tools > 0:
+        return idle_long
+    if use_short_idle:
+        return idle_after_thinking
+    return idle_long
 
 
 def write_complete_meta(meta: dict) -> None:
@@ -82,6 +124,7 @@ def main() -> int:
     saw_output = False
     use_short_idle = False
     last_short_idle_source: str | None = None
+    in_flight_tools = 0
     line_buf = b""
     fd = proc.stdout.fileno()
 
@@ -99,22 +142,23 @@ def main() -> int:
             )
             return 124
 
-        idle_limit = idle_after_thinking if use_short_idle else idle_long
+        idle_limit = idle_limit_secs(
+            in_flight_tools, use_short_idle, idle_long, idle_after_thinking
+        )
         wait = min(5.0, idle_limit, deadline - now)
         ready, _, _ = select.select([fd], [], [], wait)
         if ready:
             chunk = os.read(fd, 65536)
             if chunk:
                 line_buf, kinds = feed_lines(line_buf, chunk)
-                for kind in kinds:
-                    if kind == "short_idle_thinking":
-                        use_short_idle = True
-                        last_short_idle_source = "thinking"
-                    elif kind == "short_idle_tool_call":
-                        use_short_idle = True
-                        last_short_idle_source = "tool_call"
-                    else:
-                        use_short_idle = False
+                in_flight_tools, use_short_idle, last_short_idle_source = (
+                    apply_stream_kinds(
+                        kinds,
+                        in_flight_tools,
+                        use_short_idle,
+                        last_short_idle_source,
+                    )
+                )
 
                 sys.stdout.buffer.write(chunk)
                 sys.stdout.buffer.flush()
@@ -126,13 +170,18 @@ def main() -> int:
                 # Hung CLI: fd readable but no bytes — sleep so we do not spin.
                 time.sleep(min(1.0, max(0.0, idle_limit - (time.monotonic() - last_output))))
 
+        idle_limit = idle_limit_secs(
+            in_flight_tools, use_short_idle, idle_long, idle_after_thinking
+        )
         if (
             saw_output
             and proc.poll() is None
             and (time.monotonic() - last_output) >= idle_limit
         ):
-            idle_kind = "short" if use_short_idle else "long"
+            idle_kind = "short" if in_flight_tools == 0 and use_short_idle else "long"
             label = f"{idle_kind} idle"
+            if in_flight_tools > 0:
+                label = f"{label} ({in_flight_tools} tool(s) in flight)"
             print(
                 f"gch-agent-idle-wrap: no output for {idle_limit}s ({label}); stopping agent",
                 file=sys.stderr,
@@ -141,8 +190,9 @@ def main() -> int:
                 "reason": "idle_timeout",
                 "idle_kind": idle_kind,
                 "idle_secs": idle_limit,
+                "in_flight_tools": in_flight_tools,
             }
-            if use_short_idle and last_short_idle_source:
+            if idle_kind == "short" and last_short_idle_source:
                 meta["last_stream_event"] = last_short_idle_source
             write_complete_meta(meta)
             proc.send_signal(signal.SIGTERM)

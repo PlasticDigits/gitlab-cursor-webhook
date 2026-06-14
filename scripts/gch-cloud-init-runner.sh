@@ -174,9 +174,9 @@ run_cursor_agent() {
 
   cd "${workspace}"
 
-  # Long idle: no stream-json while a shell command runs (playwright, npm, etc.).
+  # Long idle: no stream-json while a shell command runs (playwright, npm, forge, etc.).
+  # Short idle: after thinking/tool_call completed and no tools in flight — CLI hang.
   local idle_secs="${GCH_AGENT_IDLE_TIMEOUT_SECS:-1200}"
-  # Short idle: after thinking/tool_call completed, CLI hang is likely if still silent.
   local idle_after_thinking_secs="${GCH_AGENT_IDLE_AFTER_THINKING_SECS:-300}"
   local max_secs="${GCH_AGENT_MAX_TIMEOUT_SECS:-10800}"
   local agent_cmd=(

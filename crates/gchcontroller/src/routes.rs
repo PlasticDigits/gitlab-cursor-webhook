@@ -606,6 +606,8 @@ struct CompleteBody {
     idle_secs: Option<u64>,
     #[serde(default)]
     max_secs: Option<u64>,
+    #[serde(default)]
+    in_flight_tools: Option<u64>,
 }
 
 async fn complete_job(
@@ -639,6 +641,7 @@ async fn complete_job(
         last_stream_event = ?body.last_stream_event,
         idle_secs = ?body.idle_secs,
         max_secs = ?body.max_secs,
+        in_flight_tools = ?body.in_flight_tools,
         message = ?body.message,
         "job complete"
     );
