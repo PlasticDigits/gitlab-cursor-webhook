@@ -18,9 +18,9 @@ use gch_core::{
     job_api::{JobListResponse, JobSummary},
     server_ipv4_from_tfstate,
     filter::{
-        is_mr_label_only_update, select_issue_tag, should_forward, should_forward_issue,
-        should_forward_mr_labels, GitLabIssueWebhook, GitLabMrWebhook, SkipReason,
-        WebhookEnvelope,
+        is_mr_label_only_update, removed_agent_label_tags, select_issue_tag, should_forward,
+        should_forward_issue, should_forward_mr_labels, GitLabIssueWebhook, GitLabMrWebhook,
+        SkipReason, WebhookEnvelope,
     },
     prompt::{render_prompt, PromptContext},
     tag::MR_SECURITY_TAG,
@@ -31,6 +31,7 @@ use standardwebhooks::Webhook;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::admission::ProvisionAdmission;
 use crate::config::ControllerConfig;
 use crate::jobs::{JobRecord, JobStore};
 use crate::provision::{provision_job, ProvisionRequest};
@@ -40,6 +41,7 @@ pub struct AppState {
     pub config: Arc<ControllerConfig>,
     pub db: Arc<Database>,
     pub jobs: Arc<JobStore>,
+    pub admission: Arc<ProvisionAdmission>,
     pub dedup: Arc<DedupCache>,
     pub issue_dedup: Arc<DedupCache>,
 }
@@ -372,6 +374,11 @@ async fn handle_issue(state: &AppState, body: &Bytes) -> Response {
     let iid = payload.object_attributes.iid;
     let username = payload.user.username.clone();
 
+    for tag in removed_agent_label_tags(&payload) {
+        let key = issue_key(&payload.project, iid, &tag);
+        state.issue_dedup.forget(&key);
+    }
+
     let tags = match should_forward_issue(&payload, &state.config.allowed_users) {
         Ok(tags) => tags,
         Err(reason) => {
@@ -443,7 +450,7 @@ async fn provision_result(
     username: &str,
     agent: Option<&str>,
 ) -> Response {
-    match provision_job(&state.config, &state.jobs, req).await {
+    match provision_job(&state.config, &state.jobs, &state.admission, req).await {
         Ok(result) => {
             if result.queued {
                 info!(

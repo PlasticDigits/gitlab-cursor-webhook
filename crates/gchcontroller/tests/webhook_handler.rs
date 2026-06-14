@@ -14,6 +14,7 @@ use axum::{
 };
 use gch_core::{db::Database, dedup::DedupCache};
 use gchcontroller::{
+    admission::ProvisionAdmission,
     config::ControllerConfig,
     jobs::JobStore,
     routes::{self, AppState},
@@ -141,6 +142,7 @@ fn test_state() -> AppState {
         config: config.clone(),
         db: setup_db(),
         jobs: JobStore::new(),
+        admission: ProvisionAdmission::new(),
         dedup: Arc::new(DedupCache::new(config.dedup_ttl_secs)),
         issue_dedup: Arc::new(DedupCache::new(config.issue_dedup_ttl_secs)),
     }
@@ -252,6 +254,43 @@ async fn duplicate_issue_webhook_is_skipped() {
         response_json(second).await,
         serde_json::json!({ "status": "skipped" })
     );
+}
+
+#[tokio::test]
+async fn issue_verify_retrigger_after_label_removed_is_accepted() {
+    let app = routes::router(test_state());
+    let added = include_str!("fixtures/issue_update_verify_label_added.json");
+    let removed = include_str!("fixtures/issue_update_verify_label_removed.json");
+
+    let first = app
+        .clone()
+        .oneshot(signed_webhook_request(added))
+        .await
+        .unwrap();
+    assert_eq!(response_json(first).await["status"], "accepted");
+
+    let second = app
+        .clone()
+        .oneshot(signed_webhook_request(added))
+        .await
+        .unwrap();
+    assert_eq!(
+        response_json(second).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+
+    let remove = app
+        .clone()
+        .oneshot(signed_webhook_request(removed))
+        .await
+        .unwrap();
+    assert_eq!(
+        response_json(remove).await,
+        serde_json::json!({ "status": "skipped" })
+    );
+
+    let third = app.oneshot(signed_webhook_request(added)).await.unwrap();
+    assert_eq!(response_json(third).await["status"], "accepted");
 }
 
 #[tokio::test]

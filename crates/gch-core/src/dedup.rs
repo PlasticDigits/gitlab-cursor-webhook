@@ -33,6 +33,12 @@ impl DedupCache {
         seen.insert(key.to_string(), now);
         false
     }
+
+    /// Forget a key so a deliberate re-trigger (e.g. label removed then re-added) is not blocked.
+    pub fn forget(&self, key: &str) {
+        let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+        seen.remove(key);
+    }
 }
 
 /// Per-issue, per-tag flow key — implement and verify dedupe independently.
@@ -140,6 +146,16 @@ mod tests {
         assert!(cache.is_duplicate(&key));
         thread::sleep(StdDuration::from_millis(1100));
         assert!(!cache.is_duplicate(&key));
+    }
+
+    #[test]
+    fn forget_allows_retrigger_after_ttl_window() {
+        let cache = DedupCache::new(900);
+        let key = "1:12:verify";
+        assert!(!cache.is_duplicate(key));
+        assert!(cache.is_duplicate(key));
+        cache.forget(key);
+        assert!(!cache.is_duplicate(key));
     }
 
     #[test]

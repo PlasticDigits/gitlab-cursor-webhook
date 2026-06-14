@@ -1,0 +1,31 @@
+{
+  "object_kind": "issue",
+  "event_type": "issue",
+  "user": {
+    "username": "plasticdigits"
+  },
+  "project": {
+    "id": 100,
+    "name": "example-project",
+    "path_with_namespace": "group/example-project"
+  },
+  "labels": [],
+  "changes": {
+    "labels": {
+      "previous": [
+        {
+          "id": 1,
+          "title": "agent:verify"
+        }
+      ],
+      "current": []
+    }
+  },
+  "object_attributes": {
+    "action": "update",
+    "iid": 5,
+    "title": "Verify feature X",
+    "description": "Run verification for this issue",
+    "url": "https://gitlab.example/group/example-project/-/issues/5"
+  }
+}

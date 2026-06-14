@@ -249,4 +249,57 @@ mod tests {
             JobStatus::Queued
         );
     }
+
+    #[tokio::test]
+    async fn admission_serializes_burst_past_max_concurrent() {
+        use std::sync::Arc;
+
+        use crate::admission::ProvisionAdmission;
+
+        let config = Arc::new(test_config(2));
+        let jobs = JobStore::new();
+        let admission = ProvisionAdmission::new();
+
+        let mut handles = Vec::new();
+        for offset in 0..5i64 {
+            let config = config.clone();
+            let jobs = jobs.clone();
+            let admission = admission.clone();
+            handles.push(tokio::spawn(async move {
+                let _guard = admission.lock().await;
+                let defer = should_defer_provisioning(&config, &jobs).await;
+                let status = if defer {
+                    JobStatus::Queued
+                } else {
+                    JobStatus::Provisioning
+                };
+                let job = JobRecord {
+                    status,
+                    created_at: Utc::now() + Duration::seconds(offset),
+                    ..queued_job(offset, 3600)
+                };
+                jobs.insert(job).await;
+                defer
+            }));
+        }
+
+        let mut queued = 0usize;
+        for handle in handles {
+            if handle.await.expect("task") {
+                queued += 1;
+            }
+        }
+
+        assert_eq!(jobs.count_active().await, 2);
+        assert_eq!(queued, 3);
+        assert_eq!(
+            jobs
+                .list(false)
+                .await
+                .iter()
+                .filter(|j| j.status == JobStatus::Queued)
+                .count(),
+            3
+        );
+    }
 }

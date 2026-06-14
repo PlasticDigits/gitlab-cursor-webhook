@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gch_core::dedup::DedupCache;
-use gchcontroller::{config::ControllerConfig, jobs::JobStore, queue, reaper, routes};
+use gchcontroller::{admission, config::ControllerConfig, job_manifest, jobs::JobStore, queue, reaper, routes};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
@@ -59,12 +59,24 @@ async fn main() {
     reaper::spawn_reaper(config.clone(), jobs.clone(), settings);
     queue::spawn_queue_worker(config.clone(), jobs.clone());
 
+    let recovered = job_manifest::recover_queued_jobs(&config.jobs_dir);
+    for job in &recovered {
+        jobs.insert(job.clone()).await;
+    }
+    if !recovered.is_empty() {
+        if let Err(e) = queue::promote_queued_jobs(&config, &jobs).await {
+            tracing::warn!(error = %e, "failed to promote recovered queued jobs on startup");
+        }
+        tracing::info!(count = recovered.len(), "restored queued jobs from disk");
+    }
+
     tracing::info!(listen_addr = %config.listen_addr, "starting gchcontroller");
 
     let state = routes::AppState {
         config: config.clone(),
         db,
         jobs,
+        admission: admission::ProvisionAdmission::new(),
         dedup: Arc::new(DedupCache::new(config.dedup_ttl_secs)),
         issue_dedup: Arc::new(DedupCache::new(config.issue_dedup_ttl_secs)),
     };

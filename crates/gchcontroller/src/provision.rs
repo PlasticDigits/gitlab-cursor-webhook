@@ -16,8 +16,10 @@ use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::admission::ProvisionAdmission;
 use crate::cloud_init::{render_cloud_init, CloudInitParams};
 use crate::config::ControllerConfig;
+use crate::job_manifest::{remove_manifest, write_manifest};
 use crate::jobs::{JobRecord, JobStatus, JobStore};
 use crate::queue::{self, promote_queued_jobs};
 
@@ -121,6 +123,7 @@ fn provision_tasks() -> &'static ProvisionTaskRegistry {
 pub async fn provision_job(
     config: &ControllerConfig,
     jobs: &Arc<JobStore>,
+    admission: &ProvisionAdmission,
     req: ProvisionRequest,
 ) -> Result<ProvisionResult, ProvisionError> {
     let job_id = Uuid::new_v4();
@@ -130,6 +133,7 @@ pub async fn provision_job(
     let terraform_dir = config.jobs_dir.join(job_id.to_string());
     fs::create_dir_all(&terraform_dir)?;
 
+    let _admission = admission.lock().await;
     let defer = queue::should_defer_provisioning(config, jobs).await;
     let retry_at = defer.then(|| queue::next_retry_at(config));
 
@@ -168,7 +172,9 @@ pub async fn provision_job(
         terraform_dir: terraform_dir.clone(),
         server_id: None,
     };
-    jobs.insert(job).await;
+    jobs.insert(job.clone()).await;
+    write_manifest(&job);
+    drop(_admission);
 
     if defer {
         info!(
@@ -232,6 +238,9 @@ pub async fn start_terraform_for_job(
     };
 
     jobs.promote_to_provisioning(job.job_id).await;
+    if let Some(updated) = jobs.get(job.job_id).await {
+        write_manifest(&updated);
+    }
     start_terraform_for_request(
         config,
         jobs,
@@ -327,6 +336,9 @@ async fn start_terraform_for_request(
                         .await
                         .is_some()
                     {
+                        if let Some(job) = jobs.get(job_id).await {
+                            write_manifest(&job);
+                        }
                         info!(
                             %job_id,
                             %retry_at,
@@ -367,6 +379,7 @@ pub async fn destroy_job(
         return Ok(());
     }
 
+    remove_manifest(&job.terraform_dir);
     jobs.remove(job_id).await;
     info!(%job_id, "job destroyed and removed from memory");
 

@@ -154,6 +154,31 @@ fn label_newly_added(previous: &[Label], current: &[Label], target: &str) -> boo
     !has_label(previous, target) && has_label(current, target)
 }
 
+/// Agent tag names removed on an issue `update` (for clearing per-issue dedup).
+pub fn removed_agent_label_tags(payload: &GitLabIssueWebhook) -> Vec<String> {
+    if payload.object_attributes.action != "update" {
+        return Vec::new();
+    }
+    let Some(label_change) = payload
+        .changes
+        .as_ref()
+        .and_then(|changes| changes.labels.as_ref())
+    else {
+        return Vec::new();
+    };
+
+    let mut tags = Vec::new();
+    for label in &label_change.previous {
+        let Some(tag) = tag_from_agent_label(&label.title) else {
+            continue;
+        };
+        if !has_label(&label_change.current, &label.title) && !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    tags
+}
+
 fn collect_triggered_agent_labels(labels: &[Label]) -> (Vec<String>, bool) {
     let mut tags = Vec::new();
     let mut saw_reserved = false;
@@ -594,6 +619,21 @@ mod tests {
         payload.changes = Some(IssueChanges { labels: None });
         let err = should_forward_issue(&payload, &allowlist()).unwrap_err();
         assert_eq!(err, SkipReason::LabelNotTriggered);
+    }
+
+    #[test]
+    fn removed_agent_label_tags_detects_verify_removal() {
+        let mut payload = base_issue("update");
+        payload.changes = Some(IssueChanges {
+            labels: Some(LabelChange {
+                previous: vec![agent_label("verify")],
+                current: vec![],
+            }),
+        });
+        assert_eq!(
+            removed_agent_label_tags(&payload),
+            vec!["verify".to_string()]
+        );
     }
 
     #[test]
