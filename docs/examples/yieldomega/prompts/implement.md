@@ -20,7 +20,7 @@ Implement and verify GitLab issue **#{{iid}}**: {{title}}
 
 4. Ensure invariants are documented, documentation is updated, and cross-linked with the systems you are verifying, including any `./skills/` docs for third-party agent users.
 
-5. **If there are code/doc changes** — open an MR (**not draft**) against the default branch. MR description must include:
+5. **If there are code/doc changes** — Pull latest for your MR & Fix conflicts for your MR, then open an MR (**not draft**) against the default branch. MR description must include:
 
    - Summary of changes (what/why, tied to #{{iid}})
    - Checklist: each acceptance item → command or manual step → PASS/FAIL/SKIP

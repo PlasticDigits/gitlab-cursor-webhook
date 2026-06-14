@@ -58,6 +58,81 @@ post_complete() {
     >/dev/null || true
 }
 
+gch_git() {
+  local -a git_cfg=()
+  if [[ -n "${GITLAB_TOKEN:-}" ]]; then
+    git_cfg+=(-c "url.https://oauth2:${GITLAB_TOKEN}@gitlab.com/.insteadOf=https://gitlab.com/")
+  fi
+  git "${git_cfg[@]}" "$@"
+}
+
+gch_sync_workspace() {
+  local workspace="$1"
+  local git_ref="${2:-}"
+
+  if [[ -f /etc/gch/job.env ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source /etc/gch/job.env
+    set +a
+  fi
+  export GLAB_TOKEN="${GITLAB_TOKEN:-}"
+
+  if [[ ! -d "${workspace}/.git" ]]; then
+    post_status "git" "skipped: ${workspace} is not a git repository"
+    return 0
+  fi
+
+  cd "${workspace}"
+
+  post_status "git" "fetching latest from origin"
+  local attempt
+  for attempt in 1 2 3; do
+    if gch_git fetch --prune origin; then
+      break
+    fi
+    if [[ "${attempt}" -eq 3 ]]; then
+      post_status "git" "warning: git fetch failed after 3 attempts; using snapshot checkout"
+      return 1
+    fi
+    post_status "git" "fetch failed (attempt ${attempt}/3), retrying..."
+    sleep 5
+  done
+
+  if [[ -n "${git_ref}" && "${git_ref}" != "null" ]]; then
+    post_status "git" "checking out ${git_ref}"
+    if ! gch_git checkout "${git_ref}" || ! gch_git reset --hard "${git_ref}"; then
+      post_status "git" "warning: checkout ${git_ref} failed; using snapshot checkout"
+      return 1
+    fi
+  else
+    local default_branch
+    default_branch="$(gch_git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)"
+    default_branch="${default_branch:-main}"
+    post_status "git" "updating to origin/${default_branch}"
+    if ! gch_git checkout "${default_branch}" 2>/dev/null; then
+      if ! gch_git checkout -B "${default_branch}" "origin/${default_branch}"; then
+        post_status "git" "warning: could not update to origin/${default_branch}"
+        return 1
+      fi
+    fi
+    if ! gch_git reset --hard "origin/${default_branch}"; then
+      post_status "git" "warning: reset to origin/${default_branch} failed"
+      return 1
+    fi
+  fi
+
+  if [[ -f .gitmodules ]]; then
+    post_status "git" "updating submodules"
+    gch_git submodule update --init --recursive || true
+  fi
+
+  local head
+  head="$(gch_git rev-parse --short HEAD)"
+  post_status "git" "synced at ${head}"
+  return 0
+}
+
 run_cursor_agent() {
   local workspace="$1"
   local prompt="$2"
@@ -127,12 +202,7 @@ gch_run_job() {
   post_status "boot" "cloud-init runner started"
   start_heartbeat
 
-  if [[ -n "${git_ref}" && "${git_ref}" != "null" ]]; then
-    post_status "git" "checking out ${git_ref}"
-    cd "${workspace}"
-    git fetch --all || true
-    git checkout "${git_ref}" || true
-  fi
+  gch_sync_workspace "${workspace}" "${git_ref}" || true
 
   post_status "agent" "starting cursor agent"
   set +e

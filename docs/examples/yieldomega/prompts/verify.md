@@ -22,7 +22,7 @@ Verify GitLab issue **#{{iid}}**: {{title}}
 
    Start or restart infra if needed — Anvil (local EVM), frontend dev server, indexer, or other services documented in this repo.
 
-3. **If there are changes** — open an MR (**not draft**) against the default branch. MR description must include:
+3. **If there are changes** — Pull latest for your MR & Fix conflicts for your MR, then open an MR (**not draft**) against the default branch. MR description must include:
 
    - Summary of changes
    - Checklist mapping each acceptance item → command/output
