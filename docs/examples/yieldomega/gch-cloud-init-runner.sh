@@ -58,7 +58,7 @@ post_complete() {
       --arg status "${status}" \
       --argjson exit_code "${exit_code}" \
       --slurpfile meta "${meta_file}" \
-      '${meta[0]} + {status: $status, exit_code: $exit_code}')"
+      '$meta[0] + {status: $status, exit_code: $exit_code}')"
     rm -f "${meta_file}"
   else
     payload="$(jq -n \
