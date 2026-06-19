@@ -1,0 +1,7 @@
+/target/
+.git/
+.env
+*.md
+docs/
+tests/
+.gitlab-ci.yml

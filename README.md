@@ -114,6 +114,14 @@ Copy `gch-cloud-setup.sh`, `gch-cloud-init.sh`, `gch-cloud-init-runner.sh`, `gch
 
 Each job gets its own directory under `GCH_JOBS_DIR` with a separate `terraform.tfstate`.
 
+## Docker / Coolify
+
+```bash
+docker compose up --build
+```
+
+Migrating from a bare-metal systemd deployment (SQLite + env): see [docs/docker-deploy.md](docs/docker-deploy.md).
+
 ## Development
 
 ```bash

@@ -1,0 +1,22 @@
+# Local smoke test or reference for Coolify volume/env layout.
+# Coolify: deploy from Dockerfile; mount persistent storage at /var/lib/gch.
+
+services:
+  gchcontroller:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      LISTEN_ADDR: 0.0.0.0:8080
+      GCH_DB_PATH: /var/lib/gch/gch.db
+      GCH_JOBS_DIR: /var/lib/gch/jobs
+      GCH_TERRAFORM_MODULE: /app/terraform/modules/agent-vm
+      GCH_CLOUD_INIT_TEMPLATE: /app/templates/cloud_init.yaml.tpl
+    volumes:
+      - gch-data:/var/lib/gch
+    restart: unless-stopped
+
+volumes:
+  gch-data:
