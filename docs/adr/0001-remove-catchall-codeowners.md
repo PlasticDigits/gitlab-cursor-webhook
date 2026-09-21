@@ -14,13 +14,14 @@ After independent ACCEPT, pin **that accepted hex** on leftover `{iid}`
 criterion: `git diff <accepted> -- docs/adr/0001-remove-catchall-codeowners.md docs/architecture.md`
 is empty on the product tip. Do not treat `62ffd58` as copyable.
 
-Overview (merge gate, runtime, six-row **host target**, one Woodpecker land
-rule keyed on **G3-8 ∧ G3-3**):
+Overview (merge gate, runtime, six-row **host target** = forge INVARIANTS
+2–7, one Woodpecker land rule that classifies **(a)** / **(b)** / **(c)**):
 [`architecture.md`](../architecture.md). Do not copy that table here. **G3**
 there is three groups: protection GET **host target** (six flags; #48 /
-INVARIANTS, not the `#3` body), merge procedure (**G3-4**), tree contracts
-(**G3-1**, **G3-6**, **G3-7**). Issue `#3` maps only to **G3-2**,
-**G3-8**/**G3-3**, **G3-4**.
+INVARIANTS 2–7, not the `#3` body), merge procedure (**G3-4**), tree
+contracts (**G3-1**, **G3-6**, **G3-7**). Issue `#3` maps only to **G3-2**
+(`enable_push == false`; `#3` does **not** own force-push — named #48),
+**G3-8**/**G3-3** (standing remaining CI gate), **G3-4**.
 
 Sister CAC autoland work is
 [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429).
@@ -39,10 +40,12 @@ repos**. Do not edit them from this worktree. hello#15 is not a GCH iid.
 ## Outcome
 
 Delete the catch-all `CODEOWNERS` so Forgejo does not plant **official** review
-requests on every change. Merge to `main` stays: pull request, Woodpecker
-context `ci/woodpecker/pr/woodpecker` only under architecture Decision 7
-**(c)** (observed **G3-8 ∧ G3-3**), SHA-pinned `Do: merge` by
-`@PlasticDigits`, no direct push, no `force_merge`.
+requests on every change. Merge to `main` stays: pull request, no direct
+push, Woodpecker context `ci/woodpecker/pr/woodpecker` (issue `#3` body;
+standing **G3-8** ∧ **G3-3**), SHA-pinned `Do: merge` by `@PlasticDigits`,
+no `force_merge`. Decision 7 classifies observed protection **(a)** /
+**(b)** / **(c)**; it does not drop Woodpecker from that remaining gate.
+**S2 never merges `#3`.**
 
 **Land vehicle B:** product PR
 [#3](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/3) (or a successor)
@@ -65,9 +68,12 @@ remains.
 
 **Land vs leftover-complete.** Land fail-closes on **G3-9** / **G3-10** via
 **repo admin** attest (not S2 GET). If **G3-9 ≠ 0** or **G3-10** is `true`,
-that mismatch is a **named** local/host DEPS. Leftover-complete (S3)
-**records** dated observed JSON plus a written vs-target diff (does not
-“prove” flags), plus dedicated post-merge plant-check PR `{n}` closed
+that mismatch is a **named** local/host DEPS. Land of `#3` is Decision 7
+**(c)** today and requires `ci/woodpecker/pr/woodpecker` **success** on the
+product-tip SHA (architecture executable **(c)** sequence). Leftover-complete
+(S3) **records** dated observed JSON plus a written vs-target diff (does not
+“prove” flags) **after** that **(c)** success; drift after land is `#48`,
+not an S3 fail. Plus dedicated post-merge plant-check PR `{n}` closed
 unmerged, plus four-path absence (**G3-1 last**). S3 is not a close gate for
 `#3`.
 
@@ -105,19 +111,23 @@ not `"code/maintainers"`. On the reviews GET, `team.organization` is `null`.
 Renovate [#2](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/2) has the
 same planted team request. Land criterion 6 **always** applies.
 
-Fleet protection under #48 is described as the architecture six-row **host
-target**, including `block_on_official_review_requests=false` (**G3-10**) and
+Fleet protection under #48 is the architecture six-row **host target**
+(forge INVARIANTS **2–7**), including
+`block_on_official_review_requests=false` (**G3-10**) and
 `required_approvals=0` (**G3-9**). Issue `#3` did not publish that table.
-Unauthenticated `#48` / `INVARIANTS.md` are 404; that source is unverified
-here. This design has **no** dated protection JSON for
+Unauthenticated HTML of `#48` / `INVARIANTS.md` **404s**; the contract is
+readable with a repo token. Do not treat fleet / `code/hello` as this repo’s
+GET. This design has **no** dated protection JSON pasted for
 `code/gitlab-cursor-webhook` (unauthenticated GET is 401). Do **not** paste a
-dated JSON from an unauthenticated session. Do **not** treat the leftover
+dated JSON from an unauthenticated session. Independent review of SHA
+`9f8dec8` observed this repo’s live `main` protection already matching that
+table; land of `#3` is Decision 7 **(c)** today. Do **not** treat the leftover
 request on `#3` as non-blocking from fleet values. It is non-blocking **only
-after** repo admin **comments** dated GET JSON of **this** repo’s `main` rule
-showing **G3-9** and **G3-10** on leftover `{iid}` **and** on `pulls/3`. If
-**G3-9 ≠ 0** or **G3-10** is still `true` here, or that JSON is missing, do
-not land `#3`; record a named local/host DEPS. That leftover request also must
-not be treated as S3 evidence.
+after** `@PlasticDigits` **comments** dated GET JSON of **this** repo’s
+`main` rule showing **G3-9** and **G3-10** on leftover `{iid}` **and** on
+`pulls/3`. If **G3-9 ≠ 0** or **G3-10** is still `true` here, or that JSON is
+missing, do not land `#3`; record a named local/host DEPS. That leftover
+request also must not be treated as S3 evidence.
 
 Incomplete product tip (not this design commit; PR `#3` is `draft: false`):
 `022f4f510113c6e8fcfd973a0869753a6fb375be` on `chore/remove-catchall-codeowners`
@@ -131,8 +141,9 @@ commit statuses (`[]`).
 two files land on the **same merged tip** as the README pointer. Do not rewrite
 those runbooks.
 
-Issue body points at forgejo `docs/INVARIANTS.md`. Treat #48/#50 as claimed
-source (unverified here). Do not fork INVARIANTS into this repo.
+Issue body points at forgejo `docs/INVARIANTS.md`. Unauthenticated HTML
+404s; INVARIANTS **2–7** is the six-row host target (readable with a repo
+token). Do not fork INVARIANTS into this repo.
 
 Open PRs in this repo when #3 was filed:
 [#2](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/2) (Renovate
@@ -161,13 +172,16 @@ compose, Terraform, tokens, or auto-deploy.
 - CAC autoland predicates, occupying jobs, or `DrainSkip::OfficialReview`
   cleanup ([cl8y-agent-control#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429),
   leftover of #388). Drain comments such as `drain skip: no occupying job…` on
-  #3 are **#429**, not a #3 failure. CAC #429 does not merge `#3`.
+  #3 are **#429**, not a #3 failure. CAC #429 does not merge `#3` **or**
+  plant-check `{n}`.
 - Dismissing reviewers from the controller (forbidden substitute in #388).
 - Path-specific CODEOWNERS, a second maintainer, or `required_approvals: 1`.
 - Adding, enabling, or digest-pinning Woodpecker **in the #3 diff**. Missing
   `ci/woodpecker/pr/woodpecker` statuses are pre-existing. Do not add
   `.woodpecker.yaml` / `.woodpecker/` in the #3 diff. Observed **(c)** uses
-  the architecture unstick path, not this diff.
+  the architecture executable sequence (predecessor `{w}` authored and
+  merged by `@PlasticDigits`, then a **new push** of `#3`); not this diff.
+  Do not clear **G3-8** / **G3-3** to land `#3`.
 - Deleting or rewriting [`.gitlab-ci.yml`](../../.gitlab-ci.yml) (GitLab
   leftover; not the Forgejo merge context).
 - Changing Rust sources, `cargo` manifests, Terraform, `Dockerfile`,
@@ -219,42 +233,56 @@ compose, Terraform, tokens, or auto-deploy.
    before merge. Closing `#3` does not assign S3. Require a **dedicated**
    post-merge plant-check PR. Do not accept `#3`’s own official request, `#2`,
    or “the next natural PR.”
-7. **One Woodpecker land rule** (observed **G3-8 ∧ G3-3**). Full text:
+7. **One Woodpecker land rule** (classify **(a)** / **(b)** / **(c)**; do
+   not collapse **(a)** and **(b)**). Full text:
    [`architecture.md`](../architecture.md) “One Woodpecker land rule”. Same
-   procedure as Tests item 9, land criterion 7, the mermaid, and the
-   `pulls/3` body. Repo admin dated GET JSON of this repo’s `main` rule (S2
-   does not GET):
-   - **(a)** `enable_status_check != true` or field absent → do **not** wait
-     on Woodpecker for land of `#3`.
+   procedure as Tests item 9, land criterion 7, the **land-of-`#3`**
+   diagram, and the `pulls/3` body. Standing remaining CI gate stays
+   Woodpecker `ci/woodpecker/pr/woodpecker` (issue `#3` body). Repo admin
+   dated GET JSON of this repo’s `main` rule (S2 does not GET):
+   - **(a)** `enable_status_check != true` or field absent → **G3-8** drift.
+     Record a **named** **G3-8** DEPS. Do **not** wait on Woodpecker for
+     land of `#3`. Not a rewrite of the issue body.
    - **(b)** `true` and `status_check_contexts` **not** equal to
-     `["ci/woodpecker/pr/woodpecker"]` → do **not** wait on that name; record
-     **G3-3** drift as a **named** #48 / host DEPS.
-   - **(c)** `true` **and** contexts equal that array → host blocks until that
-     context is green. Unstick: predecessor PR that may add
-     `.woodpecker.yaml`, org/server pipeline posting onto `#3`’s SHA, **or** a
-     named host ticket that may clear **G3-8**/**G3-3** long enough to install
-     the first pipeline. A leftover “enable/post” issue is **not** sufficient
-     DEPS. Do not add `.woodpecker.yaml` in the `#3` diff. Do not fake
-     statuses. Do not `force_merge`.
+     `["ci/woodpecker/pr/woodpecker"]` → **G3-3** drift. Record a **named**
+     **G3-3** DEPS. Wait on the **observed** `status_check_contexts` list
+     (`GET .../statuses/{product-tip-sha}` success for each). Do **not**
+     merge after the DEPS iid alone.
+   - **(c)** `true` **and** contexts equal that array → **today**. Host
+     requires `ci/woodpecker/pr/woodpecker` on the product-tip SHA.
+     Executable sequence: `@PlasticDigits` predecessor `{w}` that **adds**
+     `.woodpecker.yaml` → Woodpecker posts onto `{w}` → `@PlasticDigits`
+     merges `{w}` under the same **(c)** rule → S2 **new push** of `#3`
+     (rebase onto `main`; do not merge `022f4f5`) →
+     `GET .../statuses/{new-product-tip-sha}` success → `@PlasticDigits`
+     SHA-pinned `Do: merge`. Do not clear **G3-8** / **G3-3**. Do not add
+     `.woodpecker.yaml` in the `#3` diff. Do not fake statuses. Do not
+     `force_merge`. A leftover “enable/post” issue is **not** sufficient
+     DEPS. No **may**.
 
    S2 comments this same procedure onto `pulls/3` (issue ≡ PR body).
+   **S2 never merges `#3`.**
 
 ## Actors
 
-Split so S2 cannot skip the land GET. “Implementer” is S2.
+Split so S2 cannot skip the land GET. “Implementer” is S2. **S2 never
+merges `#3`.**
 
 - **S2:** copy S0 files, delete `CODEOWNERS`, README pointer; open leftover
   `{iid}` (`iid != 3`, `pull_request` absent) with two `@login`s and pasted
   protection endpoints; comment Decision 7 onto `pulls/3`; **do not GET**
-  protection; **do not merge until** leftover `{iid}` exists, admin
-  **G3-9** / **G3-10** comment is on leftover `{iid}` and on `pulls/3`, and
-  Decision 7 holds.
+  protection; **never merge `#3`**. After leftover `{iid}` exists and S2
+  has commented Decision 7, **stop** (except the **(c)** rebase/push of `#3`
+  after predecessor `{w}` is on `main`). `@PlasticDigits` does SHA-pinned
+  `Do: merge`.
 - **`@PlasticDigits`** (repo admin of `code/gitlab-cursor-webhook`): **comment**
   dated GET JSON of the `main` rule for **G3-9** and **G3-10** (same JSON
   answers observed **G3-8** / **G3-3**) on leftover `{iid}` **and** on
-  `pulls/3`. Unauthenticated GET is 401; in-repo CI cannot do this. After
-  Integration items 5–7, `@PlasticDigits` performs SHA-pinned `Do: merge`
-  (**G3-4**). CAC #429 does not merge.
+  `pulls/3`. Unauthenticated GET is 401; in-repo CI cannot do this. Opens
+  and merges predecessor `{w}` under Decision 7 **(c)** (architecture
+  executable sequence). After Integration items 5–7 and Decision 7,
+  `@PlasticDigits` performs SHA-pinned `Do: merge` of `#3` (**G3-4**). CAC
+  #429 does not merge `#3` or plant-check `{n}`.
 - **S3 owners** (two Forgejo `@login`s on leftover `{iid}` **before** merge of
   `#3`; closing `#3` does not assign S3):
   1. `@PlasticDigits` — protection GET comment.
@@ -271,16 +299,16 @@ Split so S2 cannot skip the land GET. “Implementer” is S2.
 | `docs/CODEOWNERS`, `.gitea/CODEOWNERS`, `.forgejo/CODEOWNERS` | Must remain absent (no empty file). |
 | `docs/adr/0001-remove-catchall-codeowners.md`, `docs/architecture.md` | Copy from the independently accepted hex onto the product PR so the merged tip is S0+S1+S2 (`git diff <accepted> --` empty). Standing G3 contract lands with the delete. |
 | Forgejo PR review interface | After land, a **dedicated** plant-check PR against `main` must not get an official CODEOWNERS team request. |
-| Branch protection API | No write from this ticket. The six-row table is the #48 / INVARIANTS **host target**, not a measured GET, not the `#3` body. S2 does not GET. Repo admin **comments** dated GET JSON: land fail-closes on **G3-9** / **G3-10**; leftover-complete records observed JSON plus vs-target diff plus plant-check. |
-| `.woodpecker.yaml` / `.woodpecker/` | Must remain absent in the #3 diff. Observed **(c)** uses the architecture unstick path, not this diff. |
+| Branch protection API | No write from this ticket. The six-row table is forge INVARIANTS **2–7** / #48 **host target**, not a measured GET pasted here, not the `#3` body. `#3` does **not** own force-push (named #48). S2 does not GET. `@PlasticDigits` **comments** dated GET JSON: land fail-closes on **G3-9** / **G3-10**; leftover-complete records observed JSON plus vs-target diff plus plant-check after **(c)** success. |
+| `.woodpecker.yaml` / `.woodpecker/` | Must remain absent in the #3 diff. Observed **(c)** uses the architecture executable sequence (predecessor `{w}`), not this diff. |
 | `.gitlab-ci.yml` | Unchanged. |
 | Rust crates, Terraform, Docker, `.env.example`, gitleaks | Unchanged. |
 | README | Mandatory on the product PR: merge gate is **G3**, documented in `docs/architecture.md`; product map stays README. Relative links to ADR 0001 / architecture, which exist on that same tip. Keep the product overview. |
 | Runbooks under `docs/` | Unchanged except adding `adr/` + `architecture.md`. Plant-check may add a throwaway non-runbook path under `docs/` (Tests item 4). |
 | Leftover `{iid}` | New Forgejo issue (`pull_request` absent, `iid != 3`) in `code/gitlab-cursor-webhook` only, opened before merge of `#3`, two `@login`s, body quotes leftover-complete items 1–3. Never call `#3` the leftover. |
-| Optional Woodpecker / unstick DEPS | Named predecessor PR, org/server pipeline, or host ticket under Decision 7 **(b)**/**(c)** or **G3-9**/**G3-10** mismatch. Not leftover `{iid}`. |
+| Named Woodpecker / drift DEPS | Predecessor `{w}` under Decision 7 **(c)** (authored and merged by `@PlasticDigits`); named **G3-8** DEPS if **(a)**; named **G3-3** DEPS if **(b)**; **G3-9**/**G3-10** mismatch. Not leftover `{iid}`. Not a ticket that clears **G3-8** / **G3-3**. |
 | `pulls/3` body | S2 comments the Decision 7 procedure (same three cases). |
-| CAC / Coolify / org team `maintainers` in org `code` | Unchanged. The team may keep existing; it simply is not planted as official review. Coolify **may** rebuild if the host is git-follow on `main` (not verified in-tree; `pull_request` / non-`main` also unverified); that is not a new deploy grant. |
+| CAC / Coolify / org team `maintainers` in org `code` | Unchanged. The team may keep existing; it simply is not planted as official review. Coolify **may** rebuild if the host is git-follow on `main` (not verified in-tree; `pull_request` / non-`main` also unverified); that is not a new deploy grant. CAC #429 does not merge `#3` or plant-check `{n}`. |
 
 No runtime state, schema, or HTTP API.
 
@@ -288,14 +316,18 @@ No runtime state, schema, or HTTP API.
 
 IDs live in [`architecture.md`](../architecture.md). This ADR changes **G3-1**
 (four-path absence). It does not write protection JSON. The six-row table is
-the #48 / INVARIANTS **host target**, not the `#3` body. Land fail-closes on
-**G3-9** / **G3-10** via repo-admin attest (not S2 GET). Leftover-complete
-records observed JSON plus a written vs-target diff, plus plant-check, plus
-**G3-1 last**. Merge procedure remains **G3-4** (`@PlasticDigits`). Coolify
-**may** rebuild if git-follow on `main` (**G3-6**, not verified in-tree;
-`pull_request` / non-`main` also unverified). CAC policy remains **G3-7**.
-**G3-2** target is `enable_push == false` (no direct push); leftover-complete
-does not require that match for S3 pass; it does not claim force-push policy.
+forge INVARIANTS **2–7** / #48 **host target**, not the `#3` body. Land
+fail-closes on **G3-9** / **G3-10** via repo-admin attest (not S2 GET).
+Leftover-complete records observed JSON plus a written vs-target diff
+**after** land required **(c)** success, plus plant-check, plus **G3-1
+last**. Merge procedure remains **G3-4** (`@PlasticDigits`; S2 never merges
+`#3`). Standing **G3-4** after land does not keep Integration 5–7 as the
+forever contract. Coolify **may** rebuild if git-follow on `main` (**G3-6**,
+not verified in-tree; `pull_request` / non-`main` also unverified). CAC
+policy remains **G3-7**. **G3-2** target is `enable_push == false` (issue
+bullet “no direct `main`”); `#3` does **not** own force-push (INVARIANTS
+item 2 / named #48). Leftover-complete does not require a **G3-2** match for
+S3 pass.
 
 Product filter/provision invariants in README (HMAC fail-closed,
 `ALLOWED_USERS`, isolated Terraform state, no PR Coolify secrets) are
@@ -311,10 +343,15 @@ Product filter/provision invariants in README (HMAC fail-closed,
 | Dismiss official requests from CAC | Forbidden by #388 as a substitute for policy reversal. |
 | Direct-push the delete to `main` | Violates **G3-2**. File deletes go through a PR (already [#3](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/3)). |
 | Empty or comments-only CODEOWNERS | Forgejo still parses it. Absence is the contract. |
-| Add `.woodpecker.yaml` in the same PR | Different change (CI enablement). Missing statuses are pre-existing. Observed **(c)** unsticks via predecessor / org pipeline / host ticket, not this diff. |
+| Add `.woodpecker.yaml` in the same PR | Different change (CI enablement). Missing statuses are pre-existing. Observed **(c)** unsticks via predecessor `{w}` authored and merged by `@PlasticDigits`, then a new push of `#3`, not this diff. |
 | `force_merge` or fake Woodpecker statuses to land #3 | Forbidden by **G3-4** / **G3-3**. |
-| Dispatch land on “**G3-8** is `false` or status checks unset” | Two incompatible stories. Decision 7 is **(a)**/**(b)**/**(c)** keyed on **G3-8 ∧ G3-3**. |
-| Treat a leftover “enable/post” issue as Woodpecker DEPS | Not sufficient under **(c)**. Unstick is predecessor PR, org/server pipeline, or named host ticket that may clear **G3-8**/**G3-3**. |
+| Dispatch land on “**G3-8** is `false` or status checks unset” | Collapses **(a)** and **(b)**. Classify only **(a)** / **(b)** / **(c)**. |
+| Named host ticket that clears **G3-8** / **G3-3** to land `#3` | Policy expansion / #297 / contradicts Rollout. Forbidden. Unstick is Woodpecker success on the product-tip SHA, or stop. Clearing the check is forge `#48` / founder. |
+| Treat a leftover “enable/post” issue as Woodpecker DEPS | Not sufficient under **(c)**. Unstick is predecessor `{w}` that actually posts, then `GET .../statuses/{sha}` success. |
+| Merge under **(b)** after recording a DEPS iid only | Host **405** if observed `status_check_contexts` are not success. Wait on the **observed** list. |
+| Rewrite the standing gate as “Woodpecker only under **(c)**” | Issue `#3` keeps Woodpecker as the remaining gate. **(a)** / **(b)** are observed-drift handling. |
+| Let S2 merge `#3` after leftover + admin comment + Decision 7 | **S2 never merges `#3`**. After those gates, stop; `@PlasticDigits` does SHA-pinned `Do: merge`. |
+| Undraft plant-check `{n}` and wait 30s when draft signals are empty | Designed merge window on a tree that provisions Hetzner VMs. Keep `draft == true`. Empty draft pair is pass; present signals fail leftover-complete. |
 | Treat `#3`’s plant, `#2`, or the next natural PR as S3 | Merge closes `#3` before leftover-complete. A dedicated post-merge PR is the evidence. |
 | Vehicle **A**: docs-only PR from `cac-design-issue-3` onto `main`, then `#3` as S1+S2 | Second merge vehicle. That branch is design transport, not a product PR. Vehicle **B** puts the two files on the deletion PR so README links resolve on one tip. Incomplete product tip `022f4f5` is not that tip until S0 files and S2 are added. |
 | Wait on sibling `code/*` CODEOWNERS PRs / hello#15 | Wrong repo; no product iid dependency. |
@@ -336,8 +373,9 @@ step; false “CODEOWNERS is the trusted-PR gate” story in this repo.
 `main` via the product PR so later agents do not re-add `.* @code/maintainers`
 as a merge requirement, and a leftover Forgejo issue in this repo that
 survives merge of `#3`. No new services, jobs, flags, pipelines, or test
-harnesses. Optional named unstick / **G3-9**/**G3-10** DEPS only when observed
-JSON requires them.
+harnesses. Named predecessor `{w}` / **G3-8** / **G3-3** /
+**G3-9**/**G3-10** DEPS only when observed JSON requires them. Do not add a
+ticket that clears **G3-8** / **G3-3**.
 
 ## Migration
 
@@ -373,8 +411,7 @@ JSON requires them.
    1. Protection GET comment: @PlasticDigits
    2. Plant-check {n} + G3-1 last: @lifejkskla
 
-   S2 pasted these endpoints; S2 does not GET; S2 does not merge until
-   leftover iid + admin G3-9/G3-10 comment + Decision 7:
+   S2 pasted these endpoints; S2 does not GET; S2 never merges #3:
    - GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections
    - GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections/main
 
@@ -392,16 +429,19 @@ JSON requires them.
       re-copy does not count.
 
    2. After the delete is on `main`: dedicated plant-check PR {n}
-      (draft==true host-block; title not WIP; throwaway path under docs/
-      that is not a runbook, example docs/_plant-check-adr0001.md; no
-      manual reviewer request). Forbid .env.example, Terraform, and Docker
-      as the probe. On open, comment `do-not-merge`. GET immediately after
-      open; if both plant signals empty, set draft==false, wait 30s and
-      re-GET. Pass iff requested_reviewers_teams length 0 AND no review
+      (draft==true host-block; keep draft; title not WIP; throwaway path
+      under docs/ that is not a runbook, example
+      docs/_plant-check-adr0001.md; no manual reviewer request). Forbid
+      .env.example, Terraform, and Docker as the probe. On open, comment
+      `do-not-merge`. GET immediately after open while draft==true.
+      If either plant signal is present, leftover-complete fails (file
+      still plants). If both signals empty, that pair is the pass; do
+      not set draft==false. Undraft is not required. Pass iff
+      requested_reviewers_teams length 0 AND no review
       with official == true, state == "REQUEST_REVIEW", team.name ==
       "maintainers" (optional team.id == 4). Do not require
       team.organization on reviews. Record {n} and the two JSON bodies,
-      then close without merge in the same session after the 30s re-GET.
+      then close without merge in the same session.
       If {n} is merged, leftover-complete fails (possible host rebuild /
       #297 incident); revert the throwaway path via PR (not direct main).
       It is not a pass with a Coolify rebuild.
@@ -431,9 +471,11 @@ JSON requires them.
    is 405 or still review-gated.
 5. Do not restore the file from `docs/templates/CODEOWNERS` in cl8y-forgejo;
    that template is owned by #48.
-6. Woodpecker: Decision 7 only **(a)**/**(b)**/**(c)**. Do not restore
-   catch-all CODEOWNERS. Do not `force_merge`. Do not add `.woodpecker.yaml`
-   in the #3 diff. S2 comments the same procedure on `pulls/3`.
+6. Woodpecker: Decision 7 only **(a)**/**(b)**/**(c)**. Classify; do not
+   collapse **(a)** and **(b)**. Do not restore catch-all CODEOWNERS. Do not
+   `force_merge`. Do not add `.woodpecker.yaml` in the #3 diff. Do not clear
+   **G3-8** / **G3-3**. S2 comments the same procedure on `pulls/3`. S2
+   never merges `#3`.
 
 ## Observability
 
@@ -517,30 +559,32 @@ On `#3`, `requested_reviewers_teams[0].name == "maintainers"` and
 `team.organization.name == "code"` on reviews also misses it.
 
 `{n}` is the dedicated plant-check PR opened **after** the delete is on
-`main` by leftover owner 2. Probe a throwaway path under `docs/` that is not
-a runbook (example: `docs/_plant-check-adr0001.md`). Forbid `.env.example`,
-Terraform, and Docker as the probe. After land of `#3`, **G3-9** is proven
-`0` and **G3-10** proven `false`, so a non-draft PR against `main` can
-autoland; `do-not-merge` is only a comment. Open `{n}` with `draft == true`
-as the host-block that does not skip CODEOWNERS planting if plant signals
-still prove. Title must not contain `WIP` (case-insensitive). On open,
-comment `do-not-merge`. GET both endpoints **immediately after open**. If
-either plant signal is present on the draft, planting is not skipped. If both
-signals are empty on the draft, set `draft == false`, wait once **30
-seconds**, and re-GET both before pass; pass only if the second pair is still
-empty. Record `{n}` **and** the two JSON bodies (the pair used for the pass
-decision) on leftover `{iid}`, then **close without merge in the same
-session** after the 30s re-GET. If `{n}` is merged, leftover-complete
-**fails** (possible host rebuild / #297 incident). Recovery: revert the
-throwaway path via a new PR (not direct `main`); a Coolify rebuild from
-`{n}` is a #297 incident, not a GCH grant. In-tree compose / docker-deploy
-do not record Coolify builds on `pull_request` / non-`main` (**G3-6**). It
-is not a pass with a Coolify rebuild. PR `#3`’s own official request does not
-pass. `#2` does not pass. “The next natural PR” does not pass.
+`main` by leftover owner 2. Recipe: Tests item 4. Probe a throwaway path
+under `docs/` that is not a runbook (example:
+`docs/_plant-check-adr0001.md`). Forbid `.env.example`, Terraform, and
+Docker as the probe. After land of `#3`, **G3-9** is proven `0` and
+**G3-10** proven `false`, so a non-draft PR against `main` can autoland;
+`do-not-merge` is only a comment. Open `{n}` with `draft == true` as the
+host-block. Title must not contain `WIP` (case-insensitive). On open,
+comment `do-not-merge`. GET both endpoints **immediately after open** while
+`draft == true`. If either plant signal is **present** on the draft,
+leftover-complete **fails** (file still plants). If both signals are
+**empty** on the draft, that pair is the pass; do **not** set
+`draft == false`. Undraft is not required and must not be used. Record
+`{n}` **and** the two JSON bodies (the pair used for the pass decision) on
+leftover `{iid}`, then **close without merge in the same session**. If
+`{n}` is merged, leftover-complete **fails** (possible host rebuild / #297
+incident). Recovery: revert the throwaway path via a new PR (not direct
+`main`); a Coolify rebuild from `{n}` is a #297 incident, not a GCH grant.
+In-tree compose / docker-deploy do not record Coolify builds on
+`pull_request` / non-`main` (**G3-6**). It is not a pass with a Coolify
+rebuild. PR `#3`’s own official request does not pass. `#2` does not pass.
+“The next natural PR” does not pass. CAC #429 does not merge `{n}`.
 
 **CI / deploy.** Required host context follows Decision 7 / the architecture
-mermaid (observed **G3-8 ∧ G3-3**, not the target row). This tree does not
-post Woodpecker today. Drain comments such as `drain skip: no occupying
+**land-of-`#3`** and **standing-after-land** diagrams. Standing remaining
+CI gate is Woodpecker `ci/woodpecker/pr/woodpecker`. This tree does not post
+Woodpecker today. Drain comments such as `drain skip: no occupying
 job…` are **#429**, not a #3 failure. Coolify **may** rebuild if the host is
 git-follow on `main` (**G3-6**, not verified in-tree; `pull_request` /
 non-`main` also unverified); that is not leftover-complete.
@@ -563,14 +607,16 @@ non-`main` also unverified); that is not leftover-complete.
 | Merging the plant-check PR `{n}` | Leftover-complete **fails** (possible host rebuild / #297 incident). Recovery: revert throwaway path via PR; Coolify rebuild from `{n}` is #297. Close without merge in the same session. |
 | Protection silently reverted to official-review true | Merge 405 returns. Out of this repo; re-apply via forge policy, do not `force_merge`. Not proven by scanners. |
 | `enable_push` flipped true | **G3-2** regression (direct push). Refuse on land of any later PR. Not a leftover-complete fail. Not a force-push claim. |
-| Observed **(c)** and nothing posts Woodpecker | Use the unstick path (predecessor / org pipeline / host ticket). A leftover “enable/post” issue is not sufficient DEPS. Not solved by restoring CODEOWNERS. Do not fake statuses. Do not add `.woodpecker.yaml` in the #3 diff. |
-| Wait on `ci/woodpecker/pr/woodpecker` under **(a)** or **(b)** | Violates Decision 7. Do not wait on a context the host does not require. |
+| Observed **(c)** and nothing posts Woodpecker | Executable sequence: predecessor `{w}` then new push of `#3`. If `GET .../statuses/{product-tip-sha}` is not success, **stop**. A leftover “enable/post” issue is not sufficient DEPS. Not solved by restoring CODEOWNERS. Do not fake statuses. Do not add `.woodpecker.yaml` in the #3 diff. Do not clear **G3-8** / **G3-3**. |
+| Wait on `ci/woodpecker/pr/woodpecker` under **(a)** | Violates Decision 7. Host is not requiring status checks. Record named **G3-8** DEPS. |
+| Merge under **(b)** without observed-context success | Host **405**. Wait on the **observed** `status_check_contexts` list; record named **G3-3** DEPS. |
+| Undraft plant-check `{n}` | Designed merge window (G3-9=0, G3-10=false). Leftover-complete recipe keeps `draft == true`. |
 | Re-adding CODEOWNERS “for safety” in a follow-up | Violates **G3-1**. Reviewers must reject unless a new ADR allowlists path owners. |
 | Observed flags differ from the six-row host target | #48 leftover. Not a GCH PATCH. Not a reason to restore `CODEOWNERS`. Not a leftover-complete fail. Land blocker only for **G3-9** / **G3-10**. |
 | Rust / Terraform / Docker / token / runbook sneak into the MR | Fail review. |
 | README treats `docs/architecture.md` as product architecture or stubs the product map | Fail S2. Two architecture docs must not collide. |
 | Implement deploys Coolify, rotates tokens, or edits `autonomy.rs` / HMAC | Forbidden (#297). |
-| S2 performs the protection GET or merges without leftover `{iid}` + admin comment + Decision 7 | Forbidden. S2 pastes endpoints and stops until those gates. |
+| S2 performs the protection GET or merges `#3` | Forbidden. S2 pastes endpoints and **never merges `#3`**. After leftover `{iid}` + Decision 7 comment (+ **(c)** rebase/push), stop. |
 | `Fixes` / `Closes` leftover `{iid}` or Woodpecker/unstick iids on PR `#3` | Ban. Merge must not auto-close S3. |
 
 ## Ordered implementation slices
@@ -579,7 +625,7 @@ non-`main` also unverified); that is not leftover-complete.
 | --- | --- | --- |
 | **S0** | This design (ADR 0001 + architecture **G3**). Transport on `cac-design-issue-3`. Copy **the independently accepted hex** onto the product tip; do not call this tip accepted until independent review says so. `cac-design-issue-3` is never the merge vehicle. Do not GET protection in S0. | None in `code/gitlab-cursor-webhook`. |
 | **S1** | Delete root `CODEOWNERS`. Confirm `test -f` fails on all four Forgejo paths. | S0 files present on the **same product-PR tip** (not “S0 accepted” alone). Incomplete product tip already on `chore/remove-catchall-codeowners`. |
-| **S2** | README pointer on that **same** tip: keep README as product map; point at `docs/architecture.md` **only** for the merge gate (**G3**); relative links to ADR 0001 / architecture (those files already on the tip); do not imply CODEOWNERS is the trusted-merge gate. Keep the product overview. No Docker/Woodpecker/Terraform/Rust edits. Open leftover `{iid}` in **`code/gitlab-cursor-webhook` only**, before merge, with two `@login`s and the body template under Migration (paste the two protection endpoints). Comment Decision 7 onto `pulls/3`. Do not GET protection. Do not merge until leftover `{iid}` + admin **G3-9**/**G3-10** comment + Decision 7. Do not `Fixes`/`Closes` leftover or unstick iids. | S0 files on the same tip as S1. Same PR as S1. Admin land attest is **not** an S2 implement step. |
+| **S2** | README pointer on that **same** tip: keep README as product map; point at `docs/architecture.md` **only** for the merge gate (**G3**); relative links to ADR 0001 / architecture (those files already on the tip); do not imply CODEOWNERS is the trusted-merge gate. Keep the product overview. No Docker/Woodpecker/Terraform/Rust edits. Open leftover `{iid}` in **`code/gitlab-cursor-webhook` only**, before merge, with two `@login`s and the body template under Migration (paste the two protection endpoints). Comment Decision 7 onto `pulls/3`. Do not GET protection. **Never merge `#3`**. After leftover `{iid}` + Decision 7 comment, stop (except **(c)** rebase/push after `{w}` is on `main`). Do not `Fixes`/`Closes` leftover or unstick iids. | S0 files on the same tip as S1. Same PR as S1. Admin land attest is **not** an S2 implement step. |
 | **S3** | Leftover-complete on leftover `{iid}`: one dated leftover comment with (1) observed JSON + vs-target diff, (2) dedicated plant-check `{n}` + JSON closed unmerged, (3) four-path `test -f` fails — **G3-1 last**. Owners: `@PlasticDigits` (1), leftover owner 2 (2+3). Does **not** close `#3`. Closing `#3` does not assign S3. | S0+S1+S2 merged to `main`. Tracked on leftover `{iid}` in this repo. |
 
 PR `#3` (or successor) ships **S0+S1+S2**. S2 depends on S0 files being on the
@@ -587,14 +633,16 @@ same tip, not only on S1.
 
 **`@PlasticDigits` (not a slice of implement):** **comment** dated GET JSON
 for **G3-9** and **G3-10** on leftover `{iid}` **and** on `pulls/3` before
-merge. That JSON also answers Decision 7 (**G3-8 ∧ G3-3**). Then SHA-pinned
-`Do: merge`.
+merge. That JSON also answers Decision 7 (**G3-8** / **G3-3**). Open and
+merge predecessor `{w}` under **(c)**. Then SHA-pinned `Do: merge` of `#3`.
+**S2 never merges `#3`.** CAC #429 does not merge `#3` or plant-check `{n}`.
 
-Merge of `#3` follows Decision 7 **(a)**/**(b)**/**(c)**. Do not add
-`.woodpecker.yaml` in the #3 diff.
+Merge of `#3` follows Decision 7 **(a)**/**(b)**/**(c)** (architecture
+executable **(c)** sequence). Do not add `.woodpecker.yaml` in the #3 diff.
+Do not clear **G3-8** / **G3-3**.
 
-Sister repos (not slices of #3, not local `DEPS` unless S2 records a named
-iid under Decision 7 or **G3-9**/**G3-10** mismatch): forge #48
+Sister repos (not slices of #3, not local `DEPS` unless a named iid is
+recorded under Decision 7 or **G3-9**/**G3-10** mismatch): forge #48
 protection+templates; CAC #429 autoland occupying job; hello#15 canary.
 
 ## Tests
@@ -638,18 +686,21 @@ warnings` still pass on the product PR.
    3. Do not request users or teams in the UI or via
       `POST .../requested_reviewers`.
    4. On open, comment `do-not-merge`. GET `.../pulls/{n}` and
-      `.../pulls/{n}/reviews` **immediately after open**.
-   5. Pass iff Observability’s fail-closed pair holds. If either plant signal
-      is present on the draft, planting is not skipped. If both signals are
-      empty on the draft, set `draft == false`, wait once **30 seconds**, and
-      re-GET both; pass only if the second pair is still empty.
+      `.../pulls/{n}/reviews` **immediately after open** while
+      `draft == true`.
+   5. Pass iff Observability’s fail-closed pair holds **on the draft GET**.
+      If either plant signal is **present** on the draft, leftover-complete
+      **fails** (file still plants). If both signals are **empty** on the
+      draft, that pair is the pass; do **not** set `draft == false`.
+      Undraft is not required.
    6. Record `{n}` **and** the two JSON bodies (the pair used for the pass
       decision) on leftover `{iid}`, then **close without merge in the same
-      session** after the 30s re-GET.
+      session**.
    Fail if the title contains `WIP` (case-insensitive), if the PR has no
    changed file, if the probe is `.env.example` / Terraform / Docker / a
    runbook, if reviewers were requested manually, if there is no
-   `do-not-merge` comment, or if either GET signal is present after the wait.
+   `do-not-merge` comment, if `{n}` is undrafted, or if either GET signal is
+   present on the draft.
    If `{n}` is merged, leftover-complete **fails** (possible host rebuild /
    #297 incident). Recovery: revert the throwaway path via PR (not direct
    `main`); a Coolify rebuild from `{n}` is a #297 incident. In-tree compose
@@ -675,14 +726,17 @@ warnings` still pass on the product PR.
 8. **README collision (land, S2).** Product PR README still is the product map
    and points at `docs/architecture.md` only for the merge gate.
 9. **Host context (Decision 7).** Same **(a)**/**(b)**/**(c)** as architecture
-   “One Woodpecker land rule”. **(a)** / **(b)**: land does **not** wait on
-   `ci/woodpecker/pr/woodpecker`. **(b)** records named **G3-3** DEPS.
-   **(c)**: `GET .../statuses/{product-tip-sha}` includes that context in a
-   success state before merge, after an unstick path (predecessor PR, org/
-   server pipeline, or named host ticket). Empty statuses on `022f4f5` mean
-   that tip is not merge-ready under **(c)** until unstuck. A leftover
-   “enable/post” issue is not sufficient DEPS. Slice S2 does not add
-   `.woodpecker.yaml`.
+   “One Woodpecker land rule”. Classify only; do not collapse **(a)** and
+   **(b)**. **(a)**: named **G3-8** DEPS; do not wait on
+   `ci/woodpecker/pr/woodpecker`. **(b)**: named **G3-3** DEPS **and**
+   observed `status_check_contexts` success on the product-tip SHA. **(c)**
+   (today): architecture executable sequence — `@PlasticDigits` predecessor
+   `{w}` posts and is merged under the same **(c)** rule; S2 new-pushes `#3`;
+   `GET .../statuses/{new-product-tip-sha}` includes
+   `ci/woodpecker/pr/woodpecker` in a success state before merge. Empty
+   statuses on `022f4f5` mean that tip is not merge-ready. A leftover
+   “enable/post” issue is not sufficient DEPS. Do not clear **G3-8** /
+   **G3-3**. Slice S2 does not add `.woodpecker.yaml`.
 
 ## Rollout
 
@@ -696,13 +750,17 @@ warnings` still pass on the product PR.
   opens leftover `{iid}` with two `@login`s and pasted endpoints, comments
   Decision 7 on `pulls/3` → `@PlasticDigits` comments **G3-9** / **G3-10**
   (and observed **G3-8** / **G3-3**) on leftover `{iid}` and `pulls/3` →
-  Decision 7 **(a)**/**(b)**/**(c)** → `@PlasticDigits` SHA-pinned `Do:
-  merge` → leftover `{iid}` remains open → leftover-complete as one dated
-  comment with observed JSON + vs-target diff, plant-check (close without
-  merge in the same session), then four-path `test -f` (**G3-1 last**).
-- Woodpecker: Decision 7 only. Do not weaken **G3-3** / **G3-8** **host
-  target** rows to land #3; do not add the pipeline in this diff; do not wait
-  forever for a context the host does not require.
+  Decision 7 **(c)** executable sequence (predecessor `{w}`, new push of
+  `#3`, statuses success) → `@PlasticDigits` SHA-pinned `Do: merge` of `#3`
+  (**S2 never merges**) → leftover `{iid}` remains open → leftover-complete
+  as one dated comment with observed JSON + vs-target diff, plant-check
+  (`draft == true`; close without merge in the same session), then four-path
+  `test -f` (**G3-1 last**).
+- Woodpecker: Decision 7 only. Land of `#3` is **(c)** today. Do not weaken
+  **G3-3** / **G3-8** **host target** rows to land #3; do not add the
+  pipeline in this diff; do not clear those rows; do not wait forever for a
+  context the host does not require under **(a)**. Under **(b)** wait on the
+  **observed** list.
 - Canary role: other `code/*` catch-all deletions may copy this pattern; this
   ADR does not merge those repos. hello#15 is not a gate.
 - [#297](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/297): no
@@ -732,7 +790,8 @@ do not 404.
 
 All must be true on the merged tip. This is what merging `#3` completes. It
 does **not** wait for S3. Merger: `@PlasticDigits` (**G3-4**) after items
-5–7.
+5–7. **S2 never merges `#3`.** Standing **G3-4** after land does not keep
+items 5–7 as the forever contract.
 
 1. `main` has no CODEOWNERS file at the four Forgejo paths: `test -f` fails on
    `CODEOWNERS`, `docs/CODEOWNERS`, `.gitea/CODEOWNERS`, `.forgejo/CODEOWNERS`
@@ -767,12 +826,16 @@ does **not** wait for S3. Merger: `@PlasticDigits` (**G3-4**) after items
    is missing. If **G3-9 ≠ 0** or **G3-10** is `true`, stop; named local/host
    DEPS; do not `force_merge`.
 7. Decision 7 **(a)**/**(b)**/**(c)** as in architecture “One Woodpecker land
-   rule”, Tests item 9, and the `pulls/3` body. **(a)** / **(b)**: do not wait
-   on `ci/woodpecker/pr/woodpecker`. **(b)**: named **G3-3** DEPS recorded.
-   **(c)**: unstick path taken and that context has posted success on the
-   product-PR tip. Empty statuses on `022f4f5` do not satisfy **(c)**. Do not
-   fake the context. Do not add `.woodpecker.yaml` in this ticket. A leftover
-   “enable/post” issue is not sufficient DEPS.
+   rule”, Tests item 9, and the `pulls/3` body. Classify only; do not
+   collapse **(a)** and **(b)**. **(a)**: named **G3-8** DEPS recorded; do
+   not wait on `ci/woodpecker/pr/woodpecker`. **(b)**: named **G3-3** DEPS
+   **and** observed `status_check_contexts` success on the product-tip SHA
+   (DEPS iid alone is not merge-ready). **(c)** (today): architecture
+   executable sequence taken; `GET .../statuses/{new-product-tip-sha}`
+   shows `ci/woodpecker/pr/woodpecker` success. Empty statuses on `022f4f5`
+   do not satisfy **(c)**. Do not fake the context. Do not add
+   `.woodpecker.yaml` in this ticket. Do not clear **G3-8** / **G3-3**. A
+   leftover “enable/post” issue is not sufficient DEPS.
 
 Green `cargo test` on `chore/remove-catchall-codeowners` **before** merge is
 useful and not sufficient for leftover-complete. Empty commit statuses on
@@ -786,7 +849,9 @@ Require **one dated leftover comment** with all three items, **G3-1 last**
 later `_ensure_codeowners` apply does not count; re-delete via PR and write a
 new comment. Closing `#3` does not assign S3. Pass is dated observed JSON +
 written vs-target diff + plant-check `{n}` closed unmerged + **G3-1 last**.
-Do not “prove” flags whose drift must not fail S3.
+Recording vs-target drift is leftover-complete **after** land already
+required **(c)** success on the product-tip SHA. Do not “prove” flags whose
+drift must not fail S3. Drift after that is `#48`, not an S3 fail.
 
 1. Observed JSON + vs-target diff: `@PlasticDigits` comments dated JSON of
    the `main` rule and writes the diff of **G3-2**, **G3-8**, **G3-3**,
@@ -796,11 +861,13 @@ Do not “prove” flags whose drift must not fail S3.
    leftover-complete fail, not a reason to restore `CODEOWNERS`.
 2. Plant-check `{n}` + JSON: leftover owner 2 runs a **dedicated** plant-check
    PR following Tests item 4 and Observability’s fail-closed pair. Throwaway
-   `docs/` path that is not a runbook; `draft == true` host-block;
-   `do-not-merge` on open; close without merge in the same session after the
-   30s re-GET. Record `{n}` and the two JSON bodies. If `{n}` is merged,
-   leftover-complete **fails**; revert via PR. `#3`’s own official request
-   does not count. `#2` does not count. “The next natural PR” does not count.
+   `docs/` path that is not a runbook; `draft == true` host-block (keep
+   draft; undraft is not required); `do-not-merge` on open; close without
+   merge in the same session. Record `{n}` and the two JSON bodies. If
+   either plant signal is present on the draft, leftover-complete **fails**.
+   If `{n}` is merged, leftover-complete **fails**; revert via PR. `#3`’s
+   own official request does not count. `#2` does not count. “The next
+   natural PR” does not count. CAC #429 does not merge `{n}`.
 3. **G3-1 last:** `test -f` fails on `CODEOWNERS`, `docs/CODEOWNERS`,
    `.gitea/CODEOWNERS`, and `.forgejo/CODEOWNERS`. Recorded after items 1 and
    2 (same comment or later timestamp in the same attest). Owner: leftover
