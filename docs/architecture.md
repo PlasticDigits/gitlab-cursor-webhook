@@ -25,7 +25,7 @@ product PR so `main` holds the standing contract. Design branch
 | App | Rust workspace: `gchcontroller` (HTTP), `gchconfig` (SQLite CLI), `gch-core` (filter/dedup/db). |
 | Ingress | `POST /webhook` (Standard Webhooks HMAC). Job API for agent VMs. Admin API behind `GCH_ADMIN_TOKEN`. |
 | Data | SQLite (`GCH_DB_PATH`) + per-job Terraform state under `GCH_JOBS_DIR`. |
-| Host | Coolify/Docker (`Dockerfile`, [`docker-compose.yml`](../docker-compose.yml)); persist `/var/lib/gch`. |
+| Host | Coolify/Docker (`Dockerfile`, [`docker-compose.yml`](../docker-compose.yml)); persist `/var/lib/gch`. Git-follow / auto-rebuild on `main` is **not** recorded in-tree. |
 | Agents | Isolated Terraform apply of [`terraform/modules/agent-vm/`](../terraform/modules/agent-vm/) from a golden snapshot. |
 | Legacy CI file | [`.gitlab-ci.yml`](../.gitlab-ci.yml) is GitLab Secret Detection leftover. It does **not** post Forgejo Woodpecker context `ci/woodpecker/pr/woodpecker`. |
 
@@ -38,10 +38,10 @@ flowchart LR
   vm --> gch
   git[PR into main] --> gate[Forgejo merge gate G3]
   gate --> main[protected main]
-  main --> coolify[Coolify image rebuild; existing host]
 ```
 
-HMAC tokens, `HCLOUD_TOKEN`, `CURSOR_API_KEY`, job runtime tokens, and Coolify
+No Coolify rebuild edge: that follow is unverified in-tree (**G3-6**). HMAC
+tokens, `HCLOUD_TOKEN`, `CURSOR_API_KEY`, job runtime tokens, and Coolify
 UUID/auto-deploy are **not** this ticket
 ([agent-control #297](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/297)).
 
@@ -62,20 +62,33 @@ fleet canary, not a local iid.
 
 ### Merge gate (G3)
 
-Three contract groups. Operator
-`GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections` must equal
-the **protection** rows only. That list endpoint returns an **array**; pick
-`rule_name == "main"` (or
-`GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections/main`).
-Unauthenticated GET is **401**. A green `cargo test`, a Coolify rebuild, empty
-commit statuses, or a GET on a different `code/*` repo is **not** proof of
-**G3-2**, **G3-8**, **G3-3**, **G3-9**, **G3-10**, or **G3-5**. Fleet values
-recorded for #48 / `code/hello` are not proof for this repo. This tree has
-**no** dated protection JSON for `code/gitlab-cursor-webhook`.
+Three contract groups. The six-row table below is the issue-body /
+[cl8y-forgejo#48](https://git.cl8y.com/PlasticDigits/cl8y-forgejo/issues/48)
+**target** for this repo’s `main` rule. It is **not** a measured GET of this
+repo. Unauthenticated
+`GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections` is **401**.
+This tree has **no** dated protection JSON. Do not paste one from an
+unauthenticated session. Requiring that GET in S0 would freeze design behind a
+token this pass does not have. Fleet values / `code/hello` are not proof.
 
-#### Protection GET (six flags)
+The list endpoint returns an **array**; pick `rule_name == "main"` (or
+`GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections/main`). A
+green `cargo test`, a Coolify rebuild, empty commit statuses, or a GET on a
+different `code/*` repo is **not** proof of any flag.
 
-| ID | Flag | Required value |
+**Observed vs target.** Leftover-complete attests **observed** JSON and
+compares it to this target. Drift is a **#48 leftover**, not a GCH PATCH, not
+a reason to restore `CODEOWNERS`. Drift is not a land blocker except
+**G3-9** / **G3-10** while leftover official requests remain (they do on
+[#3](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/3) and
+[#2](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/2)). S2 implement
+does not perform the GET. Repo admin POSTs dated JSON; see ADR 0001 actors.
+
+#### Protection GET target (six flags)
+
+Issue-body / forge #48 **target**. Not a measured GET of `code/gitlab-cursor-webhook`.
+
+| ID | Flag | Target |
 | --- | --- | --- |
 | **G3-2** | `enable_push` | `false` (no direct push to `main`) |
 | **G3-8** | `enable_status_check` | `true` |
@@ -84,30 +97,42 @@ recorded for #48 / `code/hello` are not proof for this repo. This tree has
 | **G3-10** | `block_on_official_review_requests` | `false` |
 | **G3-5** | `block_on_rejected_reviews` | `true` |
 
-GET equality is these six rows for the `main` rule. Merge procedure is not a
-protection field.
+Merge procedure is not a protection field.
 
-**G3-2** is `enable_push == false` only. It does **not** mean “no force-push.”
-Force-push allowlist fields (if the host exposes them) and `apply_to_admins`
-stay [cl8y-forgejo#48](https://git.cl8y.com/PlasticDigits/cl8y-forgejo/issues/48),
+**G3-2** target is `enable_push == false` only. It does **not** mean “no
+force-push.” Force-push allowlist fields (if the host exposes them) and
+`apply_to_admins` stay
+[cl8y-forgejo#48](https://git.cl8y.com/PlasticDigits/cl8y-forgejo/issues/48),
 not this ticket.
 
-A leftover official CODEOWNERS request on an open PR (including
-[#3](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/3) and
-[#2](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/2)) is non-blocking
-**only if** a dated GET of **this** repo’s `main` rule shows **G3-9** and
-**G3-10**. If `block_on_official_review_requests` is still `true` here, merge
-is 405. Do not infer those two flags from fleet #48.
+A leftover official CODEOWNERS request on an open PR (including #3 and #2) is
+non-blocking **only after** repo admin POSTs dated JSON of **this** repo’s
+`main` rule showing **G3-9** and **G3-10** on the leftover issue **and** on
+`#3`. If `block_on_official_review_requests` is still `true` here, or that
+JSON is missing, merge is 405. Stop. Do not `force_merge`. Do not infer those
+two flags from fleet #48. S2 does not GET.
 
-This tree had **no** `.woodpecker.yaml` / `.woodpecker/` on `main` when #3 was
-filed; commit `022f4f5` had **empty** commit statuses (`[]`). Host may still
-require `ci/woodpecker/pr/woodpecker` (**G3-8** / **G3-3**). Adding a pipeline
-is **not** ADR 0001. `.gitlab-ci.yml` does not post that context. Missing
-statuses are a pre-existing host/CI gap, not a reason to keep catch-all
-CODEOWNERS, fake a context, or `force_merge`. If a dated GET of this repo
-shows **G3-8**, merge of #3 waits until that context posts (separate named CI
-issue when one exists). File-delete + docs on the tip does not satisfy
-**G3-8**.
+##### One Woodpecker land rule (observed G3-8, not the target row)
+
+Host CI is not an in-diff deliverable. This tree had **no** `.woodpecker.yaml`
+/ `.woodpecker/` on `main` when #3 was filed; commit `022f4f5` had **empty**
+commit statuses (`[]`). `.gitlab-ci.yml` does not post
+`ci/woodpecker/pr/woodpecker`. Do not add `.woodpecker.yaml` / `.woodpecker/`
+in the #3 diff. Do not fake statuses. Do not `force_merge`.
+
+Repo admin dated JSON of **this** repo’s `main` rule (same GET as **G3-9** /
+**G3-10**; S2 does not perform it):
+
+- If **G3-8** is `true`: S2 opens a named Forgejo **issue** (not a PR) in
+  `code/gitlab-cursor-webhook` whose only job is enable/post
+  `ci/woodpecker/pr/woodpecker`; record that iid on `#3`; it **is** a local
+  DEPS; do not merge `#3` until that context is green on the product tip.
+- If **G3-8** is `false` or status checks unset: land of `#3` does **not**
+  wait on Woodpecker. Leftover-complete records observed flags vs this
+  target. Do not PATCH protection from this tree.
+
+File-delete + docs on the tip does not satisfy **G3-8**. There is no “when
+one exists” hedge.
 
 #### Merge procedure
 
@@ -120,7 +145,7 @@ issue when one exists). File-delete + docs on the tip does not satisfy
 | ID | Rule |
 | --- | --- |
 | **G3-1** | `test -f` fails on `CODEOWNERS`, `docs/CODEOWNERS`, `.gitea/CODEOWNERS`, and `.forgejo/CODEOWNERS`. |
-| **G3-6** | Coolify stays `main`-follow via existing Docker image. This ticket does not add PR deploys, rotate tokens/UUIDs, edit `Dockerfile` / `docker-compose.yml` / entrypoint, or treat a Coolify rebuild as leftover-complete. Coolify secrets never attach to `pull_request` events. |
+| **G3-6** | This Coolify app **may** rebuild if the existing host is git-follow on `main` (not verified in-tree: [`docker-compose.yml`](../docker-compose.yml) and [`docker-deploy.md`](docker-deploy.md) only record Dockerfile deploy plus `/var/lib/gch`; they do not record git-follow, auto-deploy, or rebuild-on-`main`). This ticket does not add PR deploys, rotate tokens/UUIDs, or edit `Dockerfile` / `docker-compose.yml` / entrypoint. A rebuild is not leftover-complete and is not a #297 grant. Plant-check still **close without merge**. Coolify secrets never attach to `pull_request` events. |
 | **G3-7** | This tree does not expand CAC merge/deploy/spend/custody policy. |
 
 Forgejo loads the first existing file among `CODEOWNERS`, `docs/CODEOWNERS`,
@@ -132,12 +157,17 @@ file; Forgejo still parses it.
 
 ```mermaid
 flowchart LR
-  PR[Pull request into main] --> WP[Required context ci/woodpecker/pr/woodpecker]
-  WP --> MERGE[Do: merge SHA-pinned]
+  PR[Pull request into main] --> G38{Observed G3-8 on this repo main?}
+  G38 -->|true| WP[Required context ci/woodpecker/pr/woodpecker]
+  G38 -->|false or status checks unset| MERGE[Do: merge SHA-pinned]
+  WP --> MERGE
   MERGE --> MAIN[protected main]
-  MAIN --> COOLIFY[Coolify image; existing host]
 ```
 
+Standing merge procedure after vehicle **B**. The Woodpecker wait follows
+**observed** **G3-8** from a dated admin GET of **this** repo, not the six-row
+**target**. If observed **G3-8**, land of `#3` requires the named local CI
+issue (ADR 0001 Decision 7) and does not merge until that context is green.
 `cargo test` / `cargo clippy` are contributor checks, not **G3-3**.
 
 This tree does not change Forgejo protection JSON, CAC autoland predicates, or
