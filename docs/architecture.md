@@ -104,9 +104,14 @@ unauthenticated session. Requiring that GET in S0 would freeze design behind
 a token this pass does not have. Fleet values / `code/hello` are not this
 repo’s GET. `@PlasticDigits` still comments dated JSON of **this** repo on
 leftover `{iid}` and on `pulls/3`. Classify **(a)** / **(b)** / **(c)** from
-that dated GET. If it is **(c)**, take the executable sequence below. If it
-is **(a)** or **(b)**, **stop** (named DEPS; do not `Do: merge`; **S2 wait
-table** item 1 — this S2 session is complete).
+that dated GET **only after I6 attests**. I6 fail (**G3-9 ≠ 0** /
+**G3-10** `true` / `enable_push != false` / missing JSON) is wait-table
+item 3: **this S2 session is complete**; do not classify through to
+**(c)**; do not wait for `{w}`; do not `Do: merge`. If I6 attests and
+the GET is **(c)**, take the executable sequence below. If it is **(a)**
+or **(b)**, **stop** (named DEPS; do not `Do: merge`; **S2 wait table**
+item 1 — this S2 session is complete). I6 GET not yet posted is **not**
+session-complete.
 
 The list endpoint returns an **array**; pick `rule_name == "main"` (or
 `GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections/main`). A
@@ -199,23 +204,41 @@ for **one** of:
 
 1. Dated GET classified **(a)** or **(b)** and a named **G3-8** / **G3-3**
    DEPS iid on `pulls/3` → **this S2 session is complete**. Do not wait for
-   `{w}`. Do not merge `#3`.
-2. `{w}` is on `main` → resume rebase (**(c)** only).
+   `{w}`. Do not `Do: merge`.
+2. `{w}` is on `main` → resume rebase (**(c)** only). Item 2 fires only
+   while **this** S2 is still waiting (I6 attested **(c)**; `{w}` opened
+   after that attest).
+3. I6 fail or missing JSON (**G3-9 ≠ 0** or **G3-10** `true` or
+   `enable_push != false` or JSON missing) → **this S2 session is
+   complete**. Do not wait for `{w}`. Do not `Do: merge`. Do not
+   classify through to **(c)**.
+
+I6 GET **not yet posted** is **not** session-complete: S2 stays waiting
+for the operator GET (the **(c)** handoff). Completing S2 before I6
+would strand rebase with no waiter. The hole is **I6 fail**, not I6
+absent.
 
 Activation deadlock on `{w}` (executable step 2: statuses still `[]` or
 `pending` after activate + Allow PRs + agent online + retrigger) completes
 this S2 session the same way as item 1: comment **deadlock** on `pulls/3`;
-do not wait for `{w}`; do not merge `#3`.
+do not wait for `{w}`; do not `Do: merge`.
 
-**(a)** / **(b)** (and deadlock) is a terminal stop for **this** land
-attempt, not abandon-`#3`, and not a hang. After that DEPS is resolved:
-`@PlasticDigits` **re-GETs** this repo’s `main` rule onto leftover `{iid}`
-and `pulls/3`. If still **(a)** / **(b)**, stop again (this table). If
-**(c)**, run steps 1–4, then comment `{w}` is on `main`. New S2 session
-only then.
+**(a)** / **(b)** / deadlock / **I6 fail** is a terminal stop for **this**
+land attempt, not abandon-`#3`, and not a hang. After that DEPS is
+resolved (named **G3-9** / **G3-10** / **G3-2** I6 DEPS **or** named
+**G3-8** / **G3-3** / deadlock DEPS): `@PlasticDigits` **re-GETs** this
+repo’s `main` rule onto leftover `{iid}` and `pulls/3`. If I6 fails
+again, stop again (item 3). If still **(a)** / **(b)**, stop again
+(item 1). If **(c)**, run steps 1–4, then comment `{w}` is on `main`.
+After **(a)** / **(b)** / deadlock / **I6 fail**, this S2 session is
+already complete and is not waiting for item 2. `@PlasticDigits` queues
+the new S2 after commenting `{w}` is on `main` (CAC #429 still does
+not). New S2 session only then.
 
 Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
-**G3-9** / **G3-10** / **G3-2**; S2 does not perform it):
+**G3-9** / **G3-10** / **G3-2**; S2 does not perform it). I6 fail is
+wait-table item 3, not these bullets. Classify **(a)** / **(b)** / **(c)**
+only after I6 attests:
 
 - **(a)** `enable_status_check != true` or the field is absent → **G3-8**
   drift. Record a **named** **G3-8** DEPS (cl8y-forgejo iid or a local issue
@@ -241,8 +264,9 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
   **Executable (c) sequence** for this repo (post the context **before**
   merge; do not “block until green, then unstick”). No **may**. Item 7
   **(c)** is `{w}` merged under statuses GET success → S2 rebase →
-  statuses GET success (steps 1–4). Step 5 / **G3-4** is after Integration
-  items 5, 6, and 7:
+  statuses GET success (steps 1–4). Step 5 / **G3-4** is after
+  merge-ready items 1–6 **and** item 7 **(c)** only (I6 fail, **(a)**,
+  **(b)**, and deadlock are stop states, not land criteria):
 
   1. **Operator preconditions, then who posts.** Before expecting statuses
      on `{w}`: **`@PlasticDigits`** activates `code/gitlab-cursor-webhook`
@@ -320,7 +344,7 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
      `GET .../statuses/{w-tip-sha}` is still `[]` or `pending`: comment
      **deadlock** on `pulls/3`. That S2 session is **complete** (same wait
      table as **(a)** / **(b)**: do not wait for `{w}` on `main`; do not
-     merge `#3`). Diagnose activation / webhook / runner / `when` /
+     `Do: merge`). Diagnose activation / webhook / runner / `when` /
      filename is how `@PlasticDigits` writes that comment — not an open
      S2 wait, not leftover `{iid}`, not a ticket that clears **G3-8** /
      **G3-3**. If Woodpecker ACL/server is outside this repo, record a
@@ -328,19 +352,24 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
      **G3-8** / **G3-3**). Land stays blocked until statuses success.
   3. **`#3` needs a new push.** Resume only from wait-table item 2:
      `@PlasticDigits` comments on `pulls/3` that `{w}` is on `main`
-     (**(c)** only). Do not resume after **(a)** / **(b)** or deadlock.
-     S2 then **rebases** `#3` onto that `main` and **pushes** (new
-     product-tip SHA). Rebase is load-bearing: Woodpecker reads the
-     **tree** of the new SHA, not the diff vs `main`. An empty-commit of
-     `022f4f5` (no yaml in tree) will not post. Do not merge `022f4f5`. The
+     (**(c)** only). Do not resume after **(a)** / **(b)**, deadlock, or
+     I6 fail. S2 then **rebases** `#3` onto that `main` and **pushes**
+     (new product-tip SHA). Rebase is load-bearing: Woodpecker reads the
+     **tree** of the new SHA, not the diff vs `main`. **S2 gates after
+     rebase:** `HEAD:.woodpecker.yaml` exists (inherited from `main`)
+     **and** `git diff origin/main -- .woodpecker.yaml` is empty. Do not
+     add yaml in replayed `#3` commits. Do not empty-commit `022f4f5`
+     (no yaml in tree) — that will not post. Do not merge `022f4f5`. The
      `#3` diff vs `main` still must **not** add `.woodpecker.yaml`. If
      Woodpecker does not post after that push, **stop**.
   4. `GET /api/v1/repos/code/gitlab-cursor-webhook/statuses/{new-product-tip-sha}`
      shows `ci/woodpecker/pr/woodpecker` in a **success** state.
-  5. **`@PlasticDigits`** SHA-pinned `Do: merge` of `#3` after Integration
-     items 5, 6, and 7. Item 7 **(c)** **is** `{w}` merged under statuses
-     GET success → S2 rebase → statuses GET success (steps 1–4).
-     Step 5 **is** the merge (**G3-4**). S2 never merges `#3` or `{w}`.
+  5. **`@PlasticDigits`** SHA-pinned `Do: merge` of `#3` after
+     merge-ready items 1–6 **and** item 7 **(c)** only. Item 7 **(c)**
+     **is** `{w}` merged under statuses GET success → S2 rebase →
+     statuses GET success (steps 1–4). Step 5 **is** the merge
+     (**G3-4**). I6 fail, **(a)**, **(b)**, and deadlock are stop
+     states, not land criteria. S2 never merges `#3` or `{w}`.
 
 File-delete + docs on the tip does not satisfy **(c)**. There is no “when
 one exists” hedge.
@@ -349,7 +378,7 @@ one exists” hedge.
 
 | ID | Rule |
 | --- | --- |
-| **G3-4** | SHA-pinned `Do: merge` with `head_commit_id`. Never document or use `force_merge`. **Land of `#3`:** actor `@PlasticDigits` after ADR Integration items 5, 6, and 7 (item 7 **is** Decision 7 **(c)**: `{w}` statuses success → rebase → statuses GET; step 5 **is** this merge); **S2 never merges `#3`**. **Predecessor `{w}`:** actor `@PlasticDigits`; **S2 never merges `{w}`**. **Standing after land:** actor `@PlasticDigits`; no leftover `{iid}` attest. CAC [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429) does not merge `#3`, `{w}`, or plant-check `{n}`. |
+| **G3-4** | SHA-pinned `Do: merge` with `head_commit_id`. Never document or use `force_merge`. **Land of `#3`:** actor `@PlasticDigits` after ADR merge-ready items 1–6 **and** item 7 **(c)** only (item 7 **(c)** **is** Decision 7 **(c)**: `{w}` statuses success → rebase → statuses GET; step 5 **is** this merge). I6 fail, **(a)**, **(b)**, and deadlock are stop states, not land criteria. **S2 never merges `#3`**. **Predecessor `{w}`:** actor `@PlasticDigits`; **S2 never merges `{w}`**. **Standing after land:** actor `@PlasticDigits`; no leftover `{iid}` attest. CAC [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429) does not merge `#3`, `{w}`, or plant-check `{n}`. |
 
 #### Tree contracts
 
@@ -369,22 +398,26 @@ file; Forgejo still parses it.
 ##### Land of #3 (not standing)
 
 Leftover `{iid}` with two `@login`s, then I6 protection GET, then Decision 7
-classify **(a)** / **(b)** / **(c)**. Two GETs: **protection** classifies
-and fail-closes I6; **statuses** unsticks **(c)**. Merge **only** under
-**(c)** (`{w}` merged under statuses success → S2 rebase → statuses GET
-success → **G3-4**). **(a)** / **(b)**: wait-table item 1, this S2 session
-complete, do not `Do: merge`. Merger is **`@PlasticDigits`**. S2 never
-merges `#3` or `{w}`. Land uses this diagram only. Same procedure as
-Decision 7, Tests item 9, and land criterion 7.
+classify **(a)** / **(b)** / **(c)** **only on the I6 attest edge**. Two
+GETs: **protection** fail-closes I6 **or** classifies; **statuses**
+unsticks **(c)**. Merge **only** under **(c)** (`{w}` merged under
+statuses success → S2 rebase → statuses GET success → **G3-4**). I6 fail:
+wait-table item 3, this S2 session complete, do not wait for `{w}`, do
+not `Do: merge`, do not classify through to **(c)**. **(a)** / **(b)**:
+wait-table item 1, this S2 session complete, do not wait for `{w}`, do
+not `Do: merge`. Merger is **`@PlasticDigits`**. S2 never merges `#3` or
+`{w}`. Land uses this diagram only. Same procedure as Decision 7, Tests
+item 9, and land criterion 7. Merge-ready is Integration items 1–6
+**and** item 7 **(c)** only.
 
 ```mermaid
 flowchart TD
   TIP[PR 3 S0+S1+S2] --> I5[leftover iid Integration 5]
   I5 --> I6{I6 protection GET}
-  I6 -->|fail G3-9 or G3-10 true or enable_push != false or missing JSON| STOPI6[stop named DEPS]
+  I6 -->|fail G3-9 or G3-10 true or enable_push != false or missing JSON| STOPI6[S2 session complete do not wait for w do not Do merge]
   I6 -->|attest G3-9=0 G3-10=false enable_push=false| ABC{Classify a b c}
-  ABC -->|a named G3-8 DEPS| STOPA[S2 session complete do not wait for w]
-  ABC -->|b named G3-3 DEPS| STOPB[S2 session complete do not wait for w]
+  ABC -->|a named G3-8 DEPS| STOPA[S2 session complete do not wait for w do not Do merge]
+  ABC -->|b named G3-3 DEPS| STOPB[S2 session complete do not wait for w do not Do merge]
   ABC -->|c| W[w merged under statuses GET success]
   W --> RB[S2 rebase new product tip]
   RB --> ST[statuses GET success]
@@ -393,17 +426,21 @@ flowchart TD
 ```
 
 I6 is a **decision**: fail-close on **G3-9 ≠ 0**, **G3-10** `true`,
-`enable_push != false` (**G3-2**), or missing JSON → stop, named DEPS.
-Same GET can be **(c)** and **G3-10**=true; the fail edge is taken, not
-merge. **(a)** / **(b)** stay distinct stop nodes (wait-table item 1).
-**(c)** is `{w}` merged under statuses success → S2 rebase → **statuses**
-GET success → **G3-4**. Protection GET classifies; statuses GET unsticks.
-This `#3` diff must not add `.woodpecker.yaml`.
+`enable_push != false` (**G3-2**), or missing JSON → **STOPI6**, named
+DEPS, wait-table item 3 (**this S2 session is complete**; do not wait
+for `{w}`; do not `Do: merge`; do not classify through to **(c)**). Same
+GET can be **(c)** and **G3-10**=true; the fail edge is taken, not
+merge. **STOPA** / **STOPB** are distinct stop nodes (wait-table item 1;
+do not `Do: merge`). **(c)** is `{w}` merged under statuses success →
+S2 rebase → **statuses** GET success → **G3-4**. Protection GET
+fail-closes **or** classifies; statuses GET unsticks. This `#3` diff
+must not add `.woodpecker.yaml`.
 
 ##### Standing merge after land (not the #3 checklist)
 
-Observed **G3-8** ∧ **G3-3** without leftover `{iid}`. Integration items 5–7
-are land-of-`#3` only, not the forever **G3-4** contract. Standing after land
+Observed **G3-8** ∧ **G3-3** without leftover `{iid}`. Merge-ready items
+1–6 **and** item 7 **(c)** are land-of-`#3` only, not the forever **G3-4**
+contract. Standing after land
 uses this diagram only.
 
 ```mermaid

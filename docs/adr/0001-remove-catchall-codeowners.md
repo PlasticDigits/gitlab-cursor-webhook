@@ -62,8 +62,9 @@ then closes `#3`). “Or a successor” without those trailers does **not**
 close `#3`. Design branch `cac-design-issue-3` is review/transport only;
 it is **not** merged as a docs-only PR and is **not** the product PR. PR
 `#3` must not use `Fixes` / `Closes` of leftover `{iid}` or of any
-Woodpecker / unstick iid. A successor may `Fixes #3`; it still must not
-`Fixes` / `Closes` leftover or Woodpecker iids.
+Woodpecker / unstick iid. A successor that `Fixes #3` **and** closes or
+supersedes `pulls/3` still must not `Fixes` / `Closes` leftover or
+Woodpecker iids.
 
 **Leftover issue (land gate).** Before merge of `#3`, S2 opens one leftover
 Forgejo **issue** in **`code/gitlab-cursor-webhook` only** (owners and body
@@ -77,10 +78,13 @@ remains.
 
 **Land vs leftover-complete.** Land fail-closes on **G3-9** / **G3-10** and
 on `enable_push != false` (**G3-2**) via **repo admin** attest (not S2 GET).
-If **G3-9 ≠ 0** or **G3-10** is `true` or `enable_push != false`, that
-mismatch is a **named** local/host DEPS. Merge of `#3` is Decision 7 **(c)**
-only (architecture executable **(c)** sequence: `{w}` merged under statuses
-success → S2 rebase → statuses GET success → **G3-4**). Leftover-complete (S3) **records** dated observed
+If **G3-9 ≠ 0** or **G3-10** is `true` or `enable_push != false` or that
+JSON is missing, that mismatch is a **named** local/host DEPS and
+wait-table item 3: **this S2 session is complete**; do not wait for
+`{w}`; do not `Do: merge`; do not classify through to **(c)**. Merge of
+`#3` is Decision 7 **(c)** only (architecture executable **(c)**
+sequence: `{w}` merged under statuses success → S2 rebase → statuses GET
+success → **G3-4**). Leftover-complete (S3) **records** dated observed
 JSON plus a written vs-target diff (does not “prove” flags) **after (c)**
 land; drift after land is `#48`, not an S3 fail. Plus dedicated post-merge
 plant-check PR `{n}` closed unmerged, plus four-path absence (**G3-1 last**).
@@ -130,14 +134,17 @@ GET. This design has **no** dated protection JSON pasted for
 `code/gitlab-cursor-webhook` (unauthenticated GET is 401). Do **not** paste a
 dated JSON from an unauthenticated session. Classify **(a)** / **(b)** /
 **(c)** from `@PlasticDigits`’s dated GET of **this** repo’s `main` rule on
-leftover `{iid}` **and** on `pulls/3`. If that GET is **(c)**, take the
-architecture executable sequence. If it is **(a)** or **(b)**, **stop**. Do
-**not** treat the leftover request on `#3` as non-blocking from fleet
-values. It is non-blocking **only after** `@PlasticDigits` **comments** that
-dated GET JSON showing **G3-9**, **G3-10**, and **G3-2**. If **G3-9 ≠ 0** or
-**G3-10** is still `true` here, or `enable_push != false`, or that JSON is
-missing, do not land `#3`; record a named local/host DEPS. That leftover
-request also must not be treated as S3 evidence.
+leftover `{iid}` **and** on `pulls/3`. If I6 fails (**G3-9 ≠ 0** / **G3-10** `true` / `enable_push != false` /
+missing JSON), **stop** (wait-table item 3; do not classify through to
+**(c)**). If I6 attests and that GET is **(c)**, take the architecture
+executable sequence. If it is **(a)** or **(b)**, **stop**. Do **not**
+treat the leftover request on `#3` as non-blocking from fleet values. It
+is non-blocking **only after** `@PlasticDigits` **comments** that dated
+GET JSON showing **G3-9**, **G3-10**, and **G3-2**. If **G3-9 ≠ 0** or
+**G3-10** is still `true` here, or `enable_push != false`, or that JSON
+is missing, do not land `#3`; record a named local/host DEPS; **this S2
+session is complete**. That leftover request also must not be treated as
+S3 evidence.
 
 Incomplete product tip (not this design commit; PR `#3` is `draft: false`):
 `022f4f510113c6e8fcfd973a0869753a6fb375be` on `chore/remove-catchall-codeowners`
@@ -251,8 +258,11 @@ Coolify / Hetzner deploy either (Decision 7).
    leftover `{iid}` **and** on `pulls/3` (same I6 attest; no CAC dismiss).
    Human dismiss is optional leftover, not AC. If **G3-9 ≠ 0** or
    **G3-10** is `true` or `enable_push != false` or the GET is missing,
-   stop; record a named local/host DEPS. Do not `force_merge`. **S2 never
-   merges `{w}`.** CAC #429 does not merge `{w}`.
+   stop; record a named local/host DEPS; **this S2 session is complete**
+   (wait-table item 3); do not wait for `{w}`; do not `Do: merge`; do not
+   classify through to **(c)**. `{w}` is opened only after I6 attests.
+   Do not `force_merge`. **S2 never merges `{w}`.** CAC #429 does not
+   merge `{w}`.
 5. **Do not** PATCH branch protection from this repository.
 6. **Split land from leftover-complete.** Product PR `#3` (or a successor
    that `Fixes #3` and closes or supersedes `pulls/3`) is
@@ -267,7 +277,10 @@ Coolify / Hetzner deploy either (Decision 7).
    procedure as Tests item 9, land criterion 7, the **land-of-`#3`**
    diagram, and the `pulls/3` body. Standing remaining CI gate stays
    Woodpecker `ci/woodpecker/pr/woodpecker` (issue `#3` body). Repo admin
-   dated GET JSON of this repo’s `main` rule (S2 does not GET):
+   dated GET JSON of this repo’s `main` rule (S2 does not GET). I6 fail
+   (**G3-9 ≠ 0** / **G3-10** `true` / `enable_push != false` / missing
+   JSON) is wait-table item 3, not these bullets: do not classify through
+   to **(c)**. Classify **(a)** / **(b)** / **(c)** only after I6 attests:
    - **(a)** `enable_status_check != true` or field absent → **G3-8** drift.
      Record a **named** **G3-8** DEPS. **Stop. Do not `Do: merge`.** **This
      S2 session is complete** (wait-table item 1). Do not wait for `{w}`.
@@ -298,14 +311,18 @@ Coolify / Hetzner deploy either (Decision 7).
      `@PlasticDigits` comments that `{w}` is on `main` so S2 can resume
      (wait-table item 2; **(c)** only) → S2 **new push** of `#3` (rebase
      onto `main`; Woodpecker reads the **tree** of the new SHA, not the
-     diff vs `main`; do not merge `022f4f5`; empty-commit of `022f4f5`
-     will not post) →
+     diff vs `main`; **S2 gates after rebase:** `HEAD:.woodpecker.yaml`
+     exists, inherited from `main`, **and**
+     `git diff origin/main -- .woodpecker.yaml` is empty; do not add yaml
+     in replayed `#3` commits; do not merge `022f4f5`; do not empty-commit
+     `022f4f5`) →
      `GET .../statuses/{new-product-tip-sha}` success → `@PlasticDigits`
      SHA-pinned `Do: merge`. Do not clear **G3-8** / **G3-3**. Do not add
      `.woodpecker.yaml` in the `#3` diff. Do not fake statuses. Do not
      `force_merge`. A leftover “enable/post” issue is **not** sufficient
      DEPS. Activation deadlock: architecture step 2 — comment **deadlock**
-     on `pulls/3`; that S2 session is complete. No **may**.
+     on `pulls/3`; that S2 session is complete; do not `Do: merge`. No
+     **may**.
 
    **S2 wait table** (same as architecture **One Woodpecker land rule**).
    After leftover `{iid}` + this Decision 7 comment, S2 waits for **one**
@@ -313,21 +330,37 @@ Coolify / Hetzner deploy either (Decision 7).
 
    1. Dated GET classified **(a)** or **(b)** and a named **G3-8** /
       **G3-3** DEPS iid on `pulls/3` → **this S2 session is complete**. Do
-      not wait for `{w}`. Do not merge `#3`.
-   2. `{w}` is on `main` → resume rebase (**(c)** only).
+      not wait for `{w}`. Do not `Do: merge`.
+   2. `{w}` is on `main` → resume rebase (**(c)** only). Item 2 fires only
+      while **this** S2 is still waiting (I6 attested **(c)**; `{w}`
+      opened after that attest).
+   3. I6 fail or missing JSON (**G3-9 ≠ 0** or **G3-10** `true` or
+      `enable_push != false` or JSON missing) → **this S2 session is
+      complete**. Do not wait for `{w}`. Do not `Do: merge`. Do not
+      classify through to **(c)**.
+
+   I6 GET **not yet posted** is **not** session-complete: S2 stays
+   waiting for the operator GET (the **(c)** handoff). The hole is **I6
+   fail**, not I6 absent.
 
    Deadlock comment on `pulls/3` completes this S2 session the same way as
-   item 1. **(a)** / **(b)** / deadlock is a terminal stop for **this**
-   land attempt, not abandon-`#3`, and not a hang. After that DEPS is
-   resolved: `@PlasticDigits` **re-GETs** this repo’s `main` rule onto
-   leftover `{iid}` and `pulls/3`. If still **(a)** / **(b)**, stop again.
-   If **(c)**, run steps 1–4, then comment `{w}` is on `main`. New S2
-   session only then.
+   item 1. **(a)** / **(b)** / deadlock / **I6 fail** is a terminal stop
+   for **this** land attempt, not abandon-`#3`, and not a hang. After
+   that DEPS is resolved (named **G3-9** / **G3-10** / **G3-2** I6 DEPS
+   **or** named **G3-8** / **G3-3** / deadlock DEPS): `@PlasticDigits`
+   **re-GETs** this repo’s `main` rule onto leftover `{iid}` and
+   `pulls/3`. If I6 fails again, stop again (item 3). If still **(a)** /
+   **(b)**, stop again (item 1). If **(c)**, run steps 1–4, then comment
+   `{w}` is on `main`. After **(a)** / **(b)** / deadlock / **I6 fail**,
+   this S2 session is already complete and is not waiting for item 2.
+   `@PlasticDigits` queues the new S2 after commenting `{w}` is on
+   `main` (CAC #429 still does not). New S2 session only then.
 
    S2 comments this same procedure onto `pulls/3` (issue ≡ PR body).
    **S2 never merges `#3` or `{w}`.** The **land-of-`#3`** diagram is this
-   same procedure (I6 protection GET fail-close; **(c)** is `{w}` statuses
-   success → rebase → statuses GET → **G3-4**).
+   same procedure (**STOPI6** on I6 fail; **STOPA** / **STOPB** do not
+   `Do: merge`; **(c)** is `{w}` statuses success → rebase → statuses GET
+   → **G3-4**).
 
 ## Actors
 
@@ -342,9 +375,15 @@ merges `#3` or `{w}`.**
   **One Woodpecker land rule**): wait for **one** of (1) dated GET
   classified **(a)** or **(b)** and a named **G3-8** / **G3-3** DEPS iid on
   `pulls/3` → **this S2 session is complete** (do not wait for `{w}`; do
-  not merge `#3`); (2) `{w}` is on `main` → resume rebase (**(c)** only).
-  Deadlock comment on `pulls/3` completes this session like item 1.
-  `@PlasticDigits` does SHA-pinned `Do: merge` of `#3`.
+  not `Do: merge`); (2) `{w}` is on `main` → resume rebase (**(c)** only;
+  item 2 fires only while **this** S2 is still waiting); (3) I6 fail or
+  missing JSON → **this S2 session is complete** (do not wait for `{w}`;
+  do not `Do: merge`; do not classify through to **(c)**). I6 GET not yet
+  posted is **not** session-complete. Deadlock comment on `pulls/3`
+  completes this session like item 1. After rebase, S2 gates:
+  `HEAD:.woodpecker.yaml` exists **and**
+  `git diff origin/main -- .woodpecker.yaml` is empty. `@PlasticDigits`
+  does SHA-pinned `Do: merge` of `#3`.
 - **`@PlasticDigits`** (repo admin of `code/gitlab-cursor-webhook`): **comment**
   dated GET JSON of the `main` rule for **G3-9**, **G3-10**, and **G3-2**
   (same JSON answers observed **G3-8** / **G3-3**) on leftover `{iid}`
@@ -353,14 +392,20 @@ merges `#3` or `{w}`.**
   online; retrigger if `{w}` opened first). Opens predecessor `{w}`,
   records `{w}` on `pulls/3` when opening it, and merges `{w}` under
   Decision 7 **(c)** (architecture executable sequence; **S2 never merges
-  `{w}`**; CAC #429 does not merge `{w}`). `{w}`’s planted official request
+  `{w}`**; CAC #429 does not merge `{w}`). `{w}` is opened only after I6
+  attests; I6 fail does **not** open `{w}`. `{w}`’s planted official request
   is non-blocking only under the same I6 attest. Comments on `pulls/3` when
   `{w}` is on `main` so S2 can resume (wait-table item 2; **(c)** only).
-  After **(a)** / **(b)** / deadlock DEPS is resolved, **re-GET** this
-  repo’s `main` rule onto leftover `{iid}` and `pulls/3`; if still **(a)**
-  / **(b)**, stop again; if **(c)**, run steps 1–4 then comment `{w}` is on
-  `main`. After Integration items 5, 6, and 7 (item 7 **is** Decision 7
-  **(c)**: `{w}` statuses success → rebase → statuses GET),
+  After **(a)** / **(b)** / deadlock / **I6 fail** DEPS is resolved
+  (**G3-9** / **G3-10** / **G3-2** included, not only **G3-8** / **G3-3**),
+  **re-GET** this repo’s `main` rule onto leftover `{iid}` and `pulls/3`;
+  if I6 fails again, stop again; if still **(a)** / **(b)**, stop again;
+  if **(c)**, run steps 1–4 then comment `{w}` is on `main`. After
+  **(a)** / **(b)** / deadlock / **I6 fail**, this S2 session is already
+  complete and is not waiting for item 2. `@PlasticDigits` queues the new
+  S2 after commenting `{w}` is on `main` (CAC #429 still does not). After
+  merge-ready items 1–6 **and** item 7 **(c)** only (I6 fail, **(a)**,
+  **(b)**, and deadlock are stop states, not land criteria),
   `@PlasticDigits` performs SHA-pinned `Do: merge` of `#3` (**G3-4**;
   architecture step 5). CAC #429 does not merge `#3`, `{w}`,
   or plant-check `{n}`.
@@ -368,12 +413,13 @@ merges `#3` or `{w}`.**
   `#3`; closing `#3` does not assign S3):
   1. `@PlasticDigits` — protection GET comment.
   2. `@lifejkskla` — plant-check `{n}` + **G3-1 last**. Owner 2 **must be
-     able to open a PR** in this repo. S2 **must** replace this line with
-     another real `@login` that can open a PR here **before merge** if
-     `@lifejkskla` cannot. A post-merge replacement comment on leftover
-     `{iid}` is allowed if the login later cannot open `{n}`. Land of `#3`
-     still does not wait on S3. Land fails if either line still contains
-     `repo admin of`, `GCH implementer`, `<Forgejo`, or lacks a `@login`.
+     able to open a PR** in this repo. If `@lifejkskla` **cannot open** a
+     PR at leftover-open time, S2 **must** replace this line with another
+     real `@login` that can open a PR here **before merge**. If that login
+     **later** cannot open `{n}`, a post-merge replacement comment on
+     leftover `{iid}` is allowed. Land of `#3` still does not wait on S3.
+     Land fails if either line still contains `repo admin of`,
+     `GCH implementer`, `<Forgejo`, or lacks a `@login`.
 
 ## Component / state / interface changes
 
@@ -391,7 +437,7 @@ merges `#3` or `{w}`.**
 | Runbooks under `docs/` | Unchanged except adding `adr/` + `architecture.md`. Plant-check may add a throwaway non-runbook path under `docs/` (Tests item 4). |
 | Leftover `{iid}` | New Forgejo issue (`pull_request` absent, `iid != 3`) in `code/gitlab-cursor-webhook` only, opened before merge of `#3`, two `@login`s, body quotes leftover-complete items 1–3. Never call `#3` the leftover. |
 | Named Woodpecker / drift DEPS | Predecessor `{w}` under Decision 7 **(c)** (authored, recorded on `pulls/3`, and merged by `@PlasticDigits`; S2 never merges `{w}`; operator Woodpecker activation is a precondition, not leftover `{iid}`); named **G3-8** DEPS if **(a)**; named **G3-3** DEPS if **(b)**; named infra DEPS if Woodpecker ACL/server is outside this repo (deadlock); **G3-9**/**G3-10**/**G3-2** mismatch. Not leftover `{iid}`. Not a ticket that clears **G3-8** / **G3-3**. |
-| `pulls/3` body | S2 comments the Decision 7 procedure (same three cases + wait table). `@PlasticDigits` records `{w}` when opening it, comments **deadlock** if statuses stay `[]`/`pending` after activate, and comments when `{w}` is on `main` (**(c)** only). |
+| `pulls/3` body | S2 comments the Decision 7 procedure (same three cases + wait table items 1–3). `@PlasticDigits` records `{w}` when opening it, comments **deadlock** if statuses stay `[]`/`pending` after activate, and comments when `{w}` is on `main` (**(c)** only). I6 fail does not open `{w}`. |
 | CAC / Coolify / org team `maintainers` in org `code` | Unchanged. The team may keep existing; it simply is not planted as official review. Coolify **may** rebuild if the host is git-follow on `main` (not verified in-tree; `pull_request` / non-`main` also unverified); that is not a new deploy grant. `{w}` must not add a Coolify deploy step. CAC #429 does not merge `#3`, `{w}`, or plant-check `{n}`. |
 
 No runtime state, schema, or HTTP API.
@@ -438,7 +484,7 @@ Product filter/provision invariants in README (HMAC fail-closed,
 | Merge under **(a)** or **(b)** | **Stop.** Record the named DEPS. Do not `Do: merge`. Land of `#3` is **(c)** only. |
 | Merge under **(b)** after recording a DEPS iid only | Host **405** if observed `status_check_contexts` are not success, and land of `#3` still must not take **(b)**. |
 | Rewrite the standing gate as “Woodpecker only under **(c)**” | Issue `#3` keeps Woodpecker as the remaining gate. **(a)** / **(b)** are distinct **stop** reasons for land of `#3`, not alternate merge paths. |
-| Let S2 merge `#3` after leftover + admin comment + Decision 7 | **S2 never merges `#3`**. After leftover `{iid}` + Decision 7 comment, wait table: **(a)** / **(b)** + named DEPS iid → this S2 session is complete (do not wait for `{w}`); `{w}` on `main` → resume rebase (**(c)** only). `@PlasticDigits` does SHA-pinned `Do: merge`. |
+| Let S2 merge `#3` after leftover + admin comment + Decision 7 | **S2 never merges `#3`**. After leftover `{iid}` + Decision 7 comment, wait table: **(a)** / **(b)** + named DEPS iid → this S2 session is complete (do not wait for `{w}`; do not `Do: merge`); I6 fail → this S2 session is complete (wait-table item 3; do not wait for `{w}`; do not `Do: merge`; do not classify through to **(c)**); `{w}` on `main` → resume rebase (**(c)** only). `@PlasticDigits` does SHA-pinned `Do: merge`. |
 | Let S2 or CAC #429 merge `{w}` | **S2 never merges `{w}`.** CAC #429 does not merge `{w}`. Merger is `@PlasticDigits` after statuses GET success on `{w}`-tip. `{w}`’s planted official request is non-blocking only under the same I6 attest. |
 | Treat empty draft plant-check GET as leftover-complete; open `{n}` ready-first; or undraft and wait 30s | Forgejo skips CODEOWNERS while `pr.IsWorkInProgress()`; API `draft` follows the title WIP prefix. Empty draft signals are the skip, not leftover-complete. `#3`’s known-plant sample is `"draft": false`. **Mandatory sandwich:** open **WIP/draft** → strip WIP / mark ready → **GET immediately** (pass GET `draft == false`, no WIP prefix) → **re-apply WIP immediately** → close unmerged in the same session. Do **not** open ready-first. Record the **ready** GET pair, not the re-WIP GET. Residual race ready → re-WIP is still open to a poller; `do-not-merge` is not a host-block; CAC #429 prose is not a mutex. If `{n}` merges, leftover-complete **fails**; revert via PR. No 30s wait. |
 | Treat `#3`’s plant, `#2`, or the next natural PR as S3 | Merge closes `#3` before leftover-complete. A dedicated post-merge PR is the evidence. |
@@ -501,9 +547,11 @@ observed JSON requires them. Do not add a ticket that clears **G3-8** /
    placeholder remains):
    1. Protection GET comment: @PlasticDigits
    2. Plant-check {n} + G3-1 last: @lifejkskla
-      Owner 2 must be able to open a PR in this repo. S2 must replace this
-      login before merge if it cannot. A post-merge replacement comment on
-      this issue is allowed. Land of #3 does not wait on S3.
+      Owner 2 must be able to open a PR in this repo. If that login
+      cannot open a PR at leftover-open time, S2 must replace this
+      login before merge. If that login later cannot open {n}, a
+      post-merge replacement comment on this issue is allowed. Land
+      of #3 does not wait on S3.
 
    S2 pasted these endpoints; S2 does not GET; S2 never merges #3:
    - GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections
@@ -576,7 +624,7 @@ observed JSON requires them. Do not add a ticket that clears **G3-8** /
    restore catch-all CODEOWNERS. Do not `force_merge`. Do not add
    `.woodpecker.yaml` in the #3 diff. Do not clear **G3-8** / **G3-3**. S2
    comments the same procedure on `pulls/3`. S2 never merges `#3` or `{w}`.
-   S2 wait table after leftover `{iid}` + Decision 7.
+   S2 wait table after leftover `{iid}` + Decision 7 (item 3 = I6 fail).
 
 ## Observability
 
@@ -592,7 +640,10 @@ endpoints as leftover-complete. S2 pastes the endpoints and does not GET.
 Fleet #48 / `code/hello` is not this GET. Fail closed if the JSON is missing,
 if **G3-9 ≠ 0**, if **G3-10** is `true`, or if `enable_push != false`; that
 mismatch is a named local/host DEPS (this-repo issue or cl8y-forgejo iid —
-not “wait on #48” with no ticket). Do not `force_merge`. The same JSON
+not “wait on #48” with no ticket) and wait-table item 3: **this S2 session
+is complete**; do not open `{w}`; do not `Do: merge`; do not classify
+through to **(c)**. I6 GET not yet posted is **not** session-complete.
+Do not `force_merge`. The same JSON
 answers observed **G3-8** / **G3-3** for Decision 7.
 
 **Protection (operator, leftover-complete).** Repo admin of
@@ -714,18 +765,19 @@ the host is git-follow on `main` (**G3-6**, not verified in-tree;
 | Merging the plant-check PR `{n}` | Leftover-complete **fails** (possible host rebuild / #297 incident). Recovery: revert throwaway path via PR; Coolify rebuild from `{n}` is #297. Close without merge in the same session. |
 | Protection silently reverted to official-review true | Merge 405 returns. Out of this repo; re-apply via forge policy, do not `force_merge`. Not proven by scanners. |
 | `enable_push` flipped true | **G3-2** regression (direct push). Land of `#3` fail-closes if the dated GET shows `enable_push != false`. After land, refuse on later PRs. Not a leftover-complete fail (record-not-fail on post-land drift). Not a force-push claim. |
-| Observed **(c)** and nothing posts Woodpecker | Owner of activation remains `@PlasticDigits`. If after activate + Allow PRs + agent online + retrigger, `GET .../statuses/{w-tip-sha}` is still `[]` or `pending`: comment **deadlock** on `pulls/3`. That S2 session is **complete** (same wait table as **(a)** / **(b)**: do not wait for `{w}`; do not merge `#3`). If Woodpecker ACL/server is outside this repo, record a **named** infra DEPS (not leftover `{iid}`, not a ticket that clears **G3-8** / **G3-3**). Land stays blocked until statuses success. `{w}` yaml is the pinned architecture step-1 file. A leftover “enable/post” issue is not sufficient DEPS. Not solved by restoring CODEOWNERS. Do not fake statuses. Do not add `.woodpecker.yaml` in the #3 diff. Do not clear **G3-8** / **G3-3**. |
+| Observed **(c)** and nothing posts Woodpecker | Owner of activation remains `@PlasticDigits`. If after activate + Allow PRs + agent online + retrigger, `GET .../statuses/{w-tip-sha}` is still `[]` or `pending`: comment **deadlock** on `pulls/3`. That S2 session is **complete** (same wait table as **(a)** / **(b)**: do not wait for `{w}`; do not `Do: merge`). If Woodpecker ACL/server is outside this repo, record a **named** infra DEPS (not leftover `{iid}`, not a ticket that clears **G3-8** / **G3-3**). Land stays blocked until statuses success. `{w}` yaml is the pinned architecture step-1 file. A leftover “enable/post” issue is not sufficient DEPS. Not solved by restoring CODEOWNERS. Do not fake statuses. Do not add `.woodpecker.yaml` in the #3 diff. Do not clear **G3-8** / **G3-3**. |
 | Merge `#3` under **(a)** | Violates Decision 7. Record named **G3-8** DEPS. **Stop. Do not `Do: merge`.** |
 | Merge `#3` under **(b)** | Violates Decision 7. Record named **G3-3** DEPS. **Stop. Do not `Do: merge`.** |
+| Treat I6 fail as classified **(c)** and open `{w}` | Same GET can be **(c)** and **G3-10**=true (or **G3-9 ≠ 0** / `enable_push != false` / missing JSON). Fail edge is **STOPI6**, wait-table item 3. Do not open `{w}`. Do not `Do: merge`. Do not classify through to **(c)**. This S2 session is complete. |
 | Re-adding CODEOWNERS “for safety” in a follow-up | Violates **G3-1**. Reviewers must reject unless a new ADR allowlists path owners. |
 | Observed flags differ from the six-row host target | #48 leftover. Not a GCH PATCH. Not a reason to restore `CODEOWNERS`. Not a leftover-complete fail. Land blocker for **G3-9** / **G3-10** / **G3-2**. |
 | Rust / Terraform / Docker / token / runbook sneak into the MR | Fail review. |
 | `{w}` copies `code/hello` deploy steps, attaches `push`/`main`, or a noop `echo` | `#297` (Coolify on `main` push) or a paper standing gate. `{w}` is the pinned architecture step-1 yaml only. Land of `{w}` fails review. |
 | README treats `docs/architecture.md` as product architecture or stubs the product map | Fail S2. Two architecture docs must not collide. |
 | Implement deploys Coolify, rotates tokens, or edits `autonomy.rs` / HMAC | Forbidden (#297). |
-| S2 performs the protection GET or merges `#3` or `{w}` | Forbidden. S2 pastes endpoints and **never merges `#3` or `{w}`**. After leftover `{iid}` + Decision 7 comment, wait table: **(a)** / **(b)** / deadlock → this S2 session is complete; `{w}` on `main` → resume rebase (**(c)** only). |
-| `Fixes` / `Closes` leftover `{iid}` or Woodpecker/unstick iids on PR `#3` | Ban. Merge must not auto-close S3. A successor may `Fixes #3` and must close or supersede `pulls/3`. |
-| Successor PR without `Fixes #3` claimed to close `#3` | A successor iid does not close `#3` unless it `Fixes #3` or `pulls/3` is superseded. Drop the closes claim or require those trailers. |
+| S2 performs the protection GET or merges `#3` or `{w}` | Forbidden. S2 pastes endpoints and **never merges `#3` or `{w}`**. After leftover `{iid}` + Decision 7 comment, wait table: **(a)** / **(b)** / deadlock / **I6 fail** → this S2 session is complete (do not wait for `{w}`; do not `Do: merge`); `{w}` on `main` → resume rebase (**(c)** only). |
+| `Fixes` / `Closes` leftover `{iid}` or Woodpecker/unstick iids on PR `#3` | Ban. Merge must not auto-close S3. A successor closes `#3` only if it `Fixes #3` **and** closes or supersedes `pulls/3`. |
+| Successor PR without `Fixes #3` claimed to close `#3` | Merging `pulls/3` closes `#3`. A successor closes `#3` only if it `Fixes #3` **and** closes or supersedes `pulls/3`. Drop the closes claim or require both trailers. |
 
 ## Ordered implementation slices
 
@@ -733,7 +785,7 @@ the host is git-follow on `main` (**G3-6**, not verified in-tree;
 | --- | --- | --- |
 | **S0** | This design (ADR 0001 + architecture **G3**). Transport on `cac-design-issue-3`. Copy **the independently accepted hex** onto the product tip; do not call this tip accepted until independent review says so. `cac-design-issue-3` is never the merge vehicle. Do not GET protection in S0. | None in `code/gitlab-cursor-webhook`. |
 | **S1** | Delete root `CODEOWNERS`. Confirm `test -f` fails on all four Forgejo paths. | S0 files present on the **same product-PR tip** (not “S0 accepted” alone). Incomplete product tip already on `chore/remove-catchall-codeowners`. |
-| **S2** | README pointer on that **same** tip: keep README as product map; point at `docs/architecture.md` **only** for the merge gate (**G3**); relative links to ADR 0001 / architecture (those files already on the tip); do not imply CODEOWNERS is the trusted-merge gate. Keep the product overview. No Docker/Woodpecker/Terraform/Rust edits. Open leftover `{iid}` in **`code/gitlab-cursor-webhook` only**, before merge, with two `@login`s and the body template under Migration (paste the two protection endpoints). Owner 2 **must** be able to open a PR here; replace before merge if not. Comment Decision 7 onto `pulls/3`. Do not GET protection. **Never merge `#3` or `{w}`**. After leftover `{iid}` + Decision 7 comment, **stop**. **S2 wait table:** (1) dated GET **(a)** / **(b)** + named DEPS iid on `pulls/3` → this session complete (do not wait for `{w}`); (2) `{w}` on `main` → resume rebase (**(c)** only). Deadlock comment completes like (1). Do not `Fixes`/`Closes` leftover or unstick iids. | S0 files on the same tip as S1. Same PR as S1. Admin land attest is **not** an S2 implement step. |
+| **S2** | README pointer on that **same** tip: keep README as product map; point at `docs/architecture.md` **only** for the merge gate (**G3**); relative links to ADR 0001 / architecture (those files already on the tip); do not imply CODEOWNERS is the trusted-merge gate. Keep the product overview. No Docker/Woodpecker/Terraform/Rust edits. Open leftover `{iid}` in **`code/gitlab-cursor-webhook` only**, before merge, with two `@login`s and the body template under Migration (paste the two protection endpoints). Owner 2 **must** be able to open a PR here: cannot-open at leftover-open → replace **before merge**; later-cannot → post-merge leftover comment. Comment Decision 7 onto `pulls/3`. Do not GET protection. **Never merge `#3` or `{w}`**. After leftover `{iid}` + Decision 7 comment, **stop**. **S2 wait table:** (1) dated GET **(a)** / **(b)** + named DEPS iid on `pulls/3` → this session complete (do not wait for `{w}`; do not `Do: merge`); (2) `{w}` on `main` → resume rebase (**(c)** only); (3) I6 fail or missing JSON → this session complete (do not wait for `{w}`; do not `Do: merge`; do not classify through to **(c)**). I6 GET not yet posted is **not** session-complete. Deadlock comment completes like (1). After rebase, S2 gates: `HEAD:.woodpecker.yaml` exists **and** `git diff origin/main -- .woodpecker.yaml` is empty. Do not `Fixes`/`Closes` leftover or unstick iids. | S0 files on the same tip as S1. Same PR as S1. Admin land attest is **not** an S2 implement step. |
 | **S3** | Leftover-complete on leftover `{iid}`: one dated leftover comment with (1) observed JSON + vs-target diff, (2) dedicated plant-check `{n}` + JSON closed unmerged, (3) four-path `test -f` fails — **G3-1 last**. Owners: `@PlasticDigits` (1), leftover owner 2 (2+3). Does **not** close `#3`. Closing `#3` does not assign S3. | S0+S1+S2 merged to `main`. Tracked on leftover `{iid}` in this repo. |
 
 PR `#3` ships **S0+S1+S2**. A successor is allowed only if it `Fixes #3`
@@ -743,18 +795,26 @@ same tip, not only on S1.
 **`@PlasticDigits` (not a slice of implement):** **comment** dated GET JSON
 for **G3-9**, **G3-10**, and **G3-2** on leftover `{iid}` **and** on
 `pulls/3` before merge. That JSON also answers Decision 7 (**G3-8** /
-**G3-3**). Activate Woodpecker; open `{w}` and record it on `pulls/3`;
-merge `{w}` under **(c)** (**S2 never merges `{w}`**; CAC #429 does not
-merge `{w}`); comment **deadlock** if statuses stay `[]`/`pending` after
-activate; comment `{w}` is on `main` only under **(c)** (wait-table item
-2). After **(a)** / **(b)** / deadlock DEPS is resolved, **re-GET**. Then
-SHA-pinned `Do: merge` of `#3` after items 5, 6, and 7. **S2 never merges
-`#3`.** CAC #429 does not merge `#3`, `{w}`, or plant-check `{n}`.
+**G3-3**). I6 fail → wait-table item 3; do not open `{w}`. Activate
+Woodpecker; open `{w}` only after I6 attests **(c)** and record it on
+`pulls/3`; merge `{w}` under **(c)** (**S2 never merges `{w}`**; CAC
+#429 does not merge `{w}`); comment **deadlock** if statuses stay
+`[]`/`pending` after activate; comment `{w}` is on `main` only under
+**(c)** (wait-table item 2). After **(a)** / **(b)** / deadlock / **I6
+fail** DEPS is resolved (**G3-9** / **G3-10** / **G3-2** included),
+**re-GET**. After **(a)** / **(b)** / deadlock / **I6 fail**, this S2
+session is already complete: `@PlasticDigits` queues the new S2 after
+commenting `{w}` is on `main` (CAC #429 still does not). Then
+SHA-pinned `Do: merge` of `#3` after merge-ready items 1–6 **and** item
+7 **(c)** only. **S2 never merges `#3`.** CAC #429 does not merge `#3`,
+`{w}`, or plant-check `{n}`.
 
 Merge of `#3` only under Decision 7 **(c)** (`{w}` statuses success → S2
-rebase → statuses GET success → **G3-4**). **(a)** / **(b)**: wait-table
-item 1, this S2 session complete, do not `Do: merge`. Do not add
-`.woodpecker.yaml` in the #3 diff. Do not clear **G3-8** / **G3-3**.
+rebase → statuses GET success → **G3-4**). I6 fail: wait-table item 3,
+this S2 session complete, do not `Do: merge`, do not classify through to
+**(c)**. **(a)** / **(b)**: wait-table item 1, this S2 session complete,
+do not `Do: merge`. Do not add `.woodpecker.yaml` in the #3 diff. Do not
+clear **G3-8** / **G3-3**.
 
 Sister repos (not slices of #3, not local `DEPS` unless a named iid is
 recorded under Decision 7 or **G3-9**/**G3-10**/**G3-2** mismatch): forge #48
@@ -826,9 +886,11 @@ warnings` still pass on the product PR.
    `main`); a Coolify rebuild from `{n}` is a #297 incident. In-tree compose
    / docker-deploy do not record Coolify builds on `pull_request` / non-`main`
    (**G3-6**). It is not a pass with a Coolify rebuild. Do not use `#3`.
-   Do not use `#2`. Do not use “the next natural PR.” Who opens `{n}`: leftover
-   owner 2 (must be able to open a PR here; S2 replaced before merge, or a
-   post-merge replacement comment on leftover `{iid}`). Who GETs protection
+   Do not use `#2`. Do not use “the next natural PR.”    Who opens `{n}`: leftover
+   owner 2 (must be able to open a PR here). Cannot-open at leftover-open
+   time: S2 replaced **before merge**. Later-cannot: a post-merge
+   replacement comment on leftover `{iid}`. Land of `#3` still does not
+   wait on S3. Who GETs protection
    (item 3): repo admin; not S2; not cargo; not Coolify.
    Leftover-complete attest order is Integration: **G3-1 last**. Do not treat
    a passing GET or plant-check from before a later `_ensure_codeowners` apply
@@ -845,7 +907,10 @@ warnings` still pass on the product PR.
    **G3-2** (`enable_push == false`) on leftover `{iid}` **and** on
    `pulls/3` before merge. S2 does not GET. Fail closed if missing, if
    **G3-9 ≠ 0**, if **G3-10** is `true`, or if `enable_push != false`. That
-   mismatch is a named local/host DEPS. Do not `force_merge`.
+   mismatch is a named local/host DEPS and wait-table item 3: **this S2
+   session is complete**; do not wait for `{w}`; do not `Do: merge`; do
+   not classify through to **(c)**. I6 GET not yet posted is **not**
+   session-complete. Do not `force_merge`.
 8. **README collision (land, S2).** Product PR README still is the product map
    and points at `docs/architecture.md` only for the merge gate.
 9. **Host context (Decision 7).** Same **(a)**/**(b)**/**(c)** as architecture
@@ -853,7 +918,10 @@ warnings` still pass on the product PR.
    **(b)**. **S2 wait table** after leftover `{iid}` + Decision 7. **(a)**:
    named **G3-8** DEPS; **this S2 session is complete; do not wait for `{w}`;
    do not `Do: merge`.** **(b)**: named **G3-3** DEPS; **this S2 session is
-   complete; do not wait for `{w}`; do not `Do: merge`.** **(c)**:
+   complete; do not wait for `{w}`; do not `Do: merge`.** I6 fail or missing
+   JSON: wait-table item 3; **this S2 session is complete; do not wait for
+   `{w}`; do not `Do: merge`; do not classify through to **(c)**.** I6 GET
+   not yet posted is **not** session-complete. **(c)**:
    architecture steps 1–4 — `@PlasticDigits` activates Woodpecker (Allow PRs
    on, agent online; owner of activation remains `@PlasticDigits`),
    predecessor `{w}` is the pinned root `.woodpecker.yaml` (`when` is
@@ -861,49 +929,80 @@ warnings` still pass on the product PR.
    `rust:1.88-bookworm`), `{w}` recorded on `pulls/3` when opened, `{w}`
    merged under statuses GET success (**S2 never merges `{w}`**; CAC #429
    does not merge `{w}`), S2 new-pushes `#3` after wait-table item 2
-   (Woodpecker reads the **tree** of the new SHA),
+   (Woodpecker reads the **tree** of the new SHA; **S2 gates after rebase:**
+   `HEAD:.woodpecker.yaml` exists **and**
+   `git diff origin/main -- .woodpecker.yaml` is empty; do not add yaml in
+   replayed `#3` commits; do not empty-commit `022f4f5`),
    `GET .../statuses/{new-product-tip-sha}` includes
    `ci/woodpecker/pr/woodpecker` in a success state before merge. Empty
    statuses on `022f4f5` / `9f8dec8` are the CI gap, not a classification.
    A leftover “enable/post” issue is not sufficient DEPS. If after activate
    + Allow PRs + agent online + retrigger, `GET .../statuses/{w-tip-sha}` is
    still `[]` or `pending`: comment **deadlock** on `pulls/3`; that S2
-   session is **complete** (same wait table as **(a)** / **(b)**). If
-   Woodpecker ACL/server is outside this repo, record a **named** infra
-   DEPS (not leftover `{iid}`, not a ticket that clears **G3-8** /
-   **G3-3**). Land stays blocked until statuses success. Do not clear
-   **G3-8** / **G3-3**. Slice S2 does not add `.woodpecker.yaml`.
+   session is **complete** (same wait table as **(a)** / **(b)**; do not
+   `Do: merge`). If Woodpecker ACL/server is outside this repo, record a
+   **named** infra DEPS (not leftover `{iid}`, not a ticket that clears
+   **G3-8** / **G3-3**). Land stays blocked until statuses success. Do not
+   clear **G3-8** / **G3-3**. Slice S2 does not add `.woodpecker.yaml`.
 
 ## Rollout
 
 - Merge vehicle **B**: existing
   [#3](https://git.cl8y.com/code/gitlab-cursor-webhook/pulls/3) once that
-  branch’s tip is S0 files + S1 delete + S2 README. A successor PR with the
-  same three is allowed only if it `Fixes #3` **and** closes or supersedes
-  `pulls/3`. Design-only `cac-design-issue-3` must not be opened as the
-  product PR and must not be merged first as docs-only.
-- Order: fleet protection already owned by #48 → copy S0 files from the
-  independently accepted hex + delete file + README via one product PR → S2
-  opens leftover `{iid}` with two `@login`s (owner 2 can open a PR here)
-  and pasted endpoints, comments Decision 7 on `pulls/3` → first S2 session
-  **stops** (wait table) → `@PlasticDigits` comments **G3-9** / **G3-10** /
-  **G3-2** (and observed **G3-8** / **G3-3**) on leftover `{iid}` and
-  `pulls/3` → I6 fail-close if **G3-9** / **G3-10** / **G3-2** mismatch →
-  if that GET is **(a)** or **(b)**, **this S2 session is complete** (named
-  DEPS; do not wait for `{w}`; do not merge `#3`) → if **(c)**, architecture
-  executable sequence (`{w}` merged under statuses success → S2 rebase →
-  statuses GET success) → `@PlasticDigits` SHA-pinned `Do: merge` of `#3`
-  after items 5, 6, and 7 (**S2 never merges `#3` or `{w}`**) → leftover
-  `{iid}` remains open → leftover-complete **after (c)** as one dated
-  comment with observed JSON + vs-target diff, plant-check (mandatory
-  sandwich; record ready GET pair; close unmerged in the same session), then
-  four-path `test -f` (**G3-1 last**). After **(a)** / **(b)** / deadlock
-  DEPS is resolved, `@PlasticDigits` **re-GETs**; new S2 session only then.
+  branch’s tip is S0 files + S1 delete + S2 README. Merging `pulls/3`
+  closes `#3`. A successor PR with the same three is allowed only if it
+  `Fixes #3` **and** closes or supersedes `pulls/3`. Design-only
+  `cac-design-issue-3` must not be opened as the product PR and must not
+  be merged first as docs-only.
+- Order up to I6 (shared stem): fleet protection already owned by #48 →
+  copy S0 files from the independently accepted hex + delete file +
+  README via one product PR → S2 opens leftover `{iid}` with two
+  `@login`s (cannot-open at leftover-open → replace **before merge**;
+  later-cannot → post-merge leftover comment) and pasted endpoints,
+  comments Decision 7 on `pulls/3` → first S2 session **stops** (wait
+  table; I6 GET not yet posted is **not** session-complete) →
+  `@PlasticDigits` comments **G3-9** / **G3-10** / **G3-2** (and
+  observed **G3-8** / **G3-3**) on leftover `{iid}` and `pulls/3`.
+- Exclusive branches after that GET (same XOR as the **land-of-`#3`**
+  diagram; not a linear `→` chain):
+
+  1. **I6 fail** (**G3-9 ≠ 0** or **G3-10** `true` or
+     `enable_push != false` or missing JSON) → **STOPI6**. Named
+     **G3-9** / **G3-10** / **G3-2** DEPS. **This S2 session is
+     complete.** Do not open `{w}`. Do not wait for `{w}`. Do not
+     `Do: merge`. Do not classify through to **(c)** even if the same
+     GET would also be **(c)**. After those I6 DEPS resolve,
+     `@PlasticDigits` **re-GETs** onto leftover `{iid}` and `pulls/3`
+     (not a resume of a stale **(c)**). New S2 session only then:
+     `@PlasticDigits` queues it after commenting `{w}` is on `main`
+     under a later passing **(c)** (CAC #429 still does not).
+  2. **Else classify:**
+     - **(a)** or **(b)** → **STOPA** / **STOPB**. Named **G3-8** /
+       **G3-3** DEPS. **This S2 session is complete.** Do not wait for
+       `{w}`. Do not `Do: merge`. After those DEPS resolve,
+       `@PlasticDigits` **re-GETs** (same as I6: include **G3-9** /
+       **G3-10** / **G3-2**, not only **G3-8** / **G3-3**). If I6 fails
+       on the re-GET, take branch 1. If still **(a)** / **(b)**, stop
+       again. If **(c)**, take the next bullet. `@PlasticDigits` queues
+       the new S2 after commenting `{w}` is on `main` (CAC #429 still
+       does not).
+     - **(c)** → architecture executable sequence (`{w}` merged under
+       statuses success → S2 rebase with two-check gates → statuses
+       GET success) → `@PlasticDigits` SHA-pinned `Do: merge` of `#3`
+       after merge-ready items 1–6 **and** item 7 **(c)** only
+       (**S2 never merges `#3` or `{w}`**) → leftover `{iid}` remains
+       open → leftover-complete **after (c)** as one dated comment
+       with observed JSON + vs-target diff, plant-check (mandatory
+       sandwich; record ready GET pair; close unmerged in the same
+       session), then four-path `test -f` (**G3-1 last**). Deadlock
+       inside **(c)** (statuses stay `[]`/`pending` after activate):
+       **this S2 session is complete**; do not `Do: merge`; after
+       that DEPS resolves, **re-GET** as above.
 - Woodpecker: Decision 7 only. Merge of `#3` only under **(c)** when the
-  dated GET classifies **(c)**. Do not weaken **G3-3** / **G3-8** **host
-  target** rows to land #3; do not add the pipeline in the `#3` diff; do not
-  clear those rows; do not merge under **(a)** or **(b)**. `{w}` yaml is the
-  pinned architecture step-1 file.
+  dated GET **attests I6 and** classifies **(c)**. Do not weaken **G3-3** /
+  **G3-8** **host target** rows to land #3; do not add the pipeline in the
+  `#3` diff; do not clear those rows; do not merge under **(a)** or
+  **(b)** or I6 fail. `{w}` yaml is the pinned architecture step-1 file.
 - Canary role: other `code/*` catch-all deletions may copy this pattern; this
   ADR does not merge those repos. hello#15 is not a gate.
 - [#297](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/297): no
@@ -932,14 +1031,22 @@ do not 404.
 
 ## Integration completion criteria
 
-### Land (S0+S1+S2) — merge of PR `#3` (successor only with `Fixes #3`)
+### Land (S0+S1+S2) — merge of PR `#3` (successor only if it `Fixes #3` **and** closes or supersedes `pulls/3`)
 
-All must be true on the merged tip. This is what merging `#3` completes. It
-does **not** wait for S3. Merger: `@PlasticDigits` (**G3-4**) after items
-5, 6, and 7. Item 7 **(c)** is `{w}` merged under statuses success → S2
-rebase → statuses GET success. Step 5 **is** the merge. **S2 never merges
-`#3` or `{w}`.** Standing **G3-4** after land does not keep items 5–7 as
-the forever contract.
+Merging `pulls/3` closes `#3`. A successor closes `#3` only if it
+`Fixes #3` **and** closes or supersedes `pulls/3`.
+
+#### Merge-ready (the only land criteria)
+
+All of items 1–6 **and** item 7 **(c)** must be true on the merged tip.
+This is what merging `#3` completes. It does **not** wait for S3. Merger:
+`@PlasticDigits` (**G3-4**) after items 1–6 **and** item 7 **(c)** only.
+Item 7 **(c)** is `{w}` merged under statuses success → S2 rebase →
+statuses GET success. Step 5 **is** the merge. **S2 never merges `#3` or
+`{w}`.** Standing **G3-4** after land does not keep merge-ready items as
+the forever contract. I6 fail, **(a)**, **(b)**, and deadlock are **not**
+land criteria; they are stop states below. Checking off a named DEPS
+does **not** make 1–7 look complete.
 
 1. `main` has no CODEOWNERS file at the four Forgejo paths: `test -f` fails on
    `CODEOWNERS`, `docs/CODEOWNERS`, `.gitea/CODEOWNERS`, `.forgejo/CODEOWNERS`
@@ -964,38 +1071,58 @@ the forever contract.
    `repository.full_name == "code/gitlab-cursor-webhook"`, body names two
    Forgejo `@login`s (`@PlasticDigits` and leftover owner 2) and quotes
    leftover-complete items 1–3, and states that closing `#3` does not assign
-   S3. Owner 2 must be able to open a PR here; S2 **must** replace owner 2
-   before merge if that login cannot. A post-merge replacement comment on
-   leftover `{iid}` is allowed. Land of `#3` still does not wait on S3.
-   Fail if that GET does not match, if a placeholder (`repo admin of`,
-   `GCH implementer`, `<Forgejo`) remains, or if either owner line lacks a
-   `@login`. Title substring `Forgejo issue, not PR` is **not** a land gate.
-   Record `{iid}` on `pulls/3`. Never call `#3` the leftover.
-6. **Always.** `@PlasticDigits` has **commented** dated GET JSON of this
-   repo’s `main` rule showing **G3-9**, **G3-10**, and **G3-2**
-   (`enable_push == false`) on leftover `{iid}` **and** on `pulls/3`. S2
-   did not perform that GET. Do not land if the JSON is missing. If
-   **G3-9 ≠ 0** or **G3-10** is `true` or `enable_push != false`, stop;
-   named local/host DEPS; do not `force_merge`.
-7. Decision 7 **(a)**/**(b)**/**(c)** as in architecture “One Woodpecker land
-   rule”, Tests item 9, the **land-of-`#3`** diagram, and the `pulls/3` body.
-   Classify only; do not collapse **(a)** and **(b)**. **(a)**: named
-   **G3-8** DEPS recorded; **this S2 session is complete; do not wait for
-   `{w}`; do not `Do: merge`.** **(b)**: named **G3-3** DEPS recorded;
-   **this S2 session is complete; do not wait for `{w}`; do not `Do: merge`.**
-   **(c)**: `{w}` merged under statuses GET success → S2 rebase →
+   S3. Owner 2 must be able to open a PR here. Cannot-open at leftover-open
+   time: S2 **must** replace owner 2 **before merge**. Later-cannot: a
+   post-merge replacement comment on leftover `{iid}` is allowed. Land of
+   `#3` still does not wait on S3. Fail if that GET does not match, if a
+   placeholder (`repo admin of`, `GCH implementer`, `<Forgejo`) remains, or
+   if either owner line lacks a `@login`. Title substring `Forgejo issue,
+   not PR` is **not** a land gate. Record `{iid}` on `pulls/3`. Never call
+   `#3` the leftover.
+6. **I6 attest (pass only).** `@PlasticDigits` has **commented** dated GET
+   JSON of this repo’s `main` rule showing **G3-9** `== 0`, **G3-10**
+   `== false`, and **G3-2** (`enable_push == false`) on leftover `{iid}`
+   **and** on `pulls/3`. S2 did not perform that GET. Missing JSON, **G3-9
+   ≠ 0**, **G3-10** `true`, or `enable_push != false` is **not** this
+   item: that is the I6-fail stop state below. Do not `force_merge`.
+7. **(c) only.** `{w}` merged under statuses GET success → S2 rebase
+   (**S2 gates:** `HEAD:.woodpecker.yaml` exists **and**
+   `git diff origin/main -- .woodpecker.yaml` is empty; do not add yaml
+   in replayed `#3` commits; do not empty-commit `022f4f5`) →
    `GET .../statuses/{new-product-tip-sha}` shows
    `ci/woodpecker/pr/woodpecker` success → **G3-4**. Empty statuses on
    `022f4f5` / `9f8dec8` do not satisfy **(c)** (CI gap only). Do not fake
    the context. Do not add `.woodpecker.yaml` in this ticket. Do not clear
    **G3-8** / **G3-3**. A leftover “enable/post” issue is not sufficient
-   DEPS. Deadlock comment on `pulls/3` completes this S2 session like
-   **(a)** / **(b)**.
+   DEPS. Same procedure as architecture “One Woodpecker land rule”, Tests
+   item 9, the **land-of-`#3`** diagram, and the `pulls/3` body.
 
 Green `cargo test` on `chore/remove-catchall-codeowners` **before** merge is
 useful and not sufficient for leftover-complete. Empty commit statuses on
 `022f4f5` document the CI gap; they are not leftover-complete. Incomplete
 product tip `022f4f5` is incomplete without S0 files and S2.
+
+#### Stop states (not land criteria)
+
+These complete **this** S2 session. They are **not** merge-ready. Do not
+tick them as land of `#3`. Do not `Do: merge`. Do not wait for `{w}`
+(except the live I6 GET, which is **not** a stop). After the named DEPS
+resolves, `@PlasticDigits` **re-GETs** (include **G3-9** / **G3-10** /
+**G3-2**, not only **G3-8** / **G3-3**) and queues the new S2 after
+commenting `{w}` is on `main` under a later **(c)** (CAC #429 still does
+not).
+
+- **I6 fail (STOPI6, wait-table item 3):** **G3-9 ≠ 0** or **G3-10**
+  `true` or `enable_push != false` or missing JSON. Named **G3-9** /
+  **G3-10** / **G3-2** DEPS. Do not open `{w}`. Do not classify through
+  to **(c)** even if the same GET would also be **(c)**. I6 GET not yet
+  posted is **not** this stop.
+- **(a) (STOPA, wait-table item 1):** named **G3-8** DEPS recorded. Do
+  not `Do: merge`.
+- **(b) (STOPB, wait-table item 1):** named **G3-3** DEPS recorded. Do
+  not `Do: merge`.
+- **Deadlock:** comment on `pulls/3`; completes this S2 session like
+  **(a)** / **(b)**. Do not `Do: merge`.
 
 ### Leftover-complete (S3) — leftover `{iid}` in this repo; survives merge of `#3`
 
