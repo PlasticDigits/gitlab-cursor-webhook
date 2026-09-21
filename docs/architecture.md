@@ -64,7 +64,8 @@ not fork INVARIANTS here. Deploy / spend / custody / policy expansion:
 [agent-control #297](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/297)
 — this ticket is none of those. Sister CAC autoland predicates are
 [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429), not
-this controller. CAC #429 does not merge `#3` or plant-check `{n}`.
+this controller. CAC #429 does not merge `#3`, predecessor `{w}`, or
+plant-check `{n}`.
 [hello#15](https://git.cl8y.com/code/hello/pulls/15) is the fleet canary, not
 a local iid.
 
@@ -104,7 +105,8 @@ a token this pass does not have. Fleet values / `code/hello` are not this
 repo’s GET. `@PlasticDigits` still comments dated JSON of **this** repo on
 leftover `{iid}` and on `pulls/3`. Classify **(a)** / **(b)** / **(c)** from
 that dated GET. If it is **(c)**, take the executable sequence below. If it
-is **(a)** or **(b)**, **stop** (named DEPS; do not `Do: merge`).
+is **(a)** or **(b)**, **stop** (named DEPS; do not `Do: merge`; **S2 wait
+table** item 1 — this S2 session is complete).
 
 The list endpoint returns an **array**; pick `rule_name == "main"` (or
 `GET /api/v1/repos/code/gitlab-cursor-webhook/branch_protections/main`). A
@@ -192,18 +194,40 @@ host target). Decision 7 does **not** rewrite that as “Woodpecker only under
 Classify only **(a)** / **(b)** / **(c)**. Do not collapse **(a)** and
 **(b)**. Do not merge `#3` on **(a)** or **(b)**.
 
+**S2 wait table.** After leftover `{iid}` + Decision 7 comment, S2 waits
+for **one** of:
+
+1. Dated GET classified **(a)** or **(b)** and a named **G3-8** / **G3-3**
+   DEPS iid on `pulls/3` → **this S2 session is complete**. Do not wait for
+   `{w}`. Do not merge `#3`.
+2. `{w}` is on `main` → resume rebase (**(c)** only).
+
+Activation deadlock on `{w}` (executable step 2: statuses still `[]` or
+`pending` after activate + Allow PRs + agent online + retrigger) completes
+this S2 session the same way as item 1: comment **deadlock** on `pulls/3`;
+do not wait for `{w}`; do not merge `#3`.
+
+**(a)** / **(b)** (and deadlock) is a terminal stop for **this** land
+attempt, not abandon-`#3`, and not a hang. After that DEPS is resolved:
+`@PlasticDigits` **re-GETs** this repo’s `main` rule onto leftover `{iid}`
+and `pulls/3`. If still **(a)** / **(b)**, stop again (this table). If
+**(c)**, run steps 1–4, then comment `{w}` is on `main`. New S2 session
+only then.
+
 Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
 **G3-9** / **G3-10** / **G3-2**; S2 does not perform it):
 
 - **(a)** `enable_status_check != true` or the field is absent → **G3-8**
   drift. Record a **named** **G3-8** DEPS (cl8y-forgejo iid or a local issue
   that is **not** leftover `{iid}`; parity with **(b)**). **Stop. Do not
-  `Do: merge`.** Do not wait on Woodpecker as a substitute for that stop.
-  Distinct from **(b)**. This is not a rewrite of the issue body.
+  `Do: merge`.** **This S2 session is complete** (wait-table item 1). Do
+  not wait for `{w}`. Do not wait on Woodpecker as a substitute for that
+  stop. Distinct from **(b)**. This is not a rewrite of the issue body.
 - **(b)** `enable_status_check == true` and `status_check_contexts` is
   **not** equal to `["ci/woodpecker/pr/woodpecker"]` → **G3-3** drift.
   Record a **named** **G3-3** DEPS (same iid rules as **(a)**). **Stop. Do
-  not `Do: merge`.** Distinct from **(a)**. Do not merge after recording
+  not `Do: merge`.** **This S2 session is complete** (wait-table item 1).
+  Do not wait for `{w}`. Distinct from **(a)**. Do not merge after recording
   the DEPS iid alone, and do not merge after observed-context success
   either: land of `#3` is **(c)** only.
 - **(c)** `enable_status_check == true` **and** `status_check_contexts`
@@ -216,7 +240,8 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
 
   **Executable (c) sequence** for this repo (post the context **before**
   merge; do not “block until green, then unstick”). No **may**. Item 7
-  **(c)** is steps 1–4 (GET success). Step 5 / **G3-4** is after Integration
+  **(c)** is `{w}` merged under statuses GET success → S2 rebase →
+  statuses GET success (steps 1–4). Step 5 / **G3-4** is after Integration
   items 5, 6, and 7:
 
   1. **Operator preconditions, then who posts.** Before expecting statuses
@@ -232,40 +257,80 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
      Human owner who authors the first in-repo pipeline:
      **`@PlasticDigits`**. Opens predecessor PR `{w}` in **this** repo only
      (`iid != 3`, `{w}` is not leftover `{iid}`) whose tip **adds** root
-     `.woodpecker.yaml` (**not** `.woodpecker/`). `when` must include
-     `pull_request` so the posted name is **exactly**
-     `ci/woodpecker/pr/woodpecker` (a `.woodpecker/ci.yaml` posts
-     `ci/woodpecker/pr/ci`; `when:` of only `push` posts
-     `…/push/woodpecker`). Woodpecker reads the pipeline from `{w}`’s own
+     `.woodpecker.yaml` (**not** `.woodpecker/`). `{w}` is opened **after**
+     Integration item 6 attests **G3-10**=false, while `CODEOWNERS` is still
+     on `main`, so Forgejo will plant an official `maintainers` request on
+     `{w}`. That leftover request is non-blocking **only** under the same
+     I6 attest (no CAC dismiss). **S2 never merges `{w}`.** CAC #429 does
+     not merge `{w}`. Woodpecker reads the pipeline from `{w}`’s own
      **tree**, so `{w}` does not need yaml on `main` first.
 
-     Pipeline contents: contributor checks only that can succeed on this
-     tree (this repo already has `.gitleaks.toml`). No Terraform, Coolify,
-     Hetzner, compose, tokens, or auto-deploy in that pipeline. Do **not**
-     copy `code/hello`’s `.woodpecker.yaml` (gitleaks + opengrep + trivy +
-     coolify-deploy on `push`/`main`): this tree has no `.opengrep.yml`,
-     and after `{w}` merges a `main` push can hit Coolify (#297). A noop
-     `echo` makes the standing Woodpecker gate a paper check after
-     CODEOWNERS is gone.
+     **Allowed `{w}` file** — only this shape. Land of `{w}` **fails
+     review** if the yaml is not this shape. Still not in the `#3` diff.
+     Do **not** copy `code/hello`. `when` is **only** `pull_request` so the
+     posted name is **exactly** `ci/woodpecker/pr/woodpecker` (a
+     `.woodpecker/ci.yaml` posts `ci/woodpecker/pr/ci`; `when:` of `push`
+     posts `…/push/woodpecker`). Do **not** also attach Coolify-on-`push` /
+     `main`. Required step: gitleaks against existing `.gitleaks.toml`.
+     Forbid `echo`-only commands, `coolify`, `deploy`, Terraform, Hetzner,
+     compose, tokens, auto-deploy. Optional `cargo test` / `clippy` only
+     with the named image below (known to have the toolchain; not
+     implementer choice). Woodpecker 1.x `pipeline:` instead of `steps:`
+     is the same shape if `when` and the steps match.
+
+     ```yaml
+     when:
+       - event: pull_request
+
+     steps:
+       - name: gitleaks
+         image: zricethezav/gitleaks:v8.24.3
+         commands:
+           - gitleaks detect --source . --config .gitleaks.toml --verbose --no-git
+     ```
+
+     Optional extra steps **only** these, **only** this image:
+
+     ```yaml
+       - name: cargo-test
+         image: rust:1.88-bookworm
+         commands:
+           - cargo test
+       - name: clippy
+         image: rust:1.88-bookworm
+         commands:
+           - rustup component add clippy
+           - cargo clippy -- -D warnings
+     ```
 
      **`@PlasticDigits` records `{w}` on `pulls/3` when opening it.** A
      leftover “enable/post” issue with no posting workflow is **not**
      sufficient DEPS.
   2. **Who merges `{w}` (same (c) rule).** `{w}` is under the same required
-     context as `#3`. If statuses stay empty/`pending` after yaml exists,
-     diagnose activation / webhook / runner / `when` / filename — **not**
-     “need more yaml.” Merger: **`@PlasticDigits`** after
+     context as `#3`. Owner of activation remains **`@PlasticDigits`**.
+     Merger: **`@PlasticDigits`** after
      `GET /api/v1/repos/code/gitlab-cursor-webhook/statuses/{w-tip-sha}`
      includes `ci/woodpecker/pr/woodpecker` in a **success** state, then
-     SHA-pinned `Do: merge`. S2 never merges `{w}`. CAC #429 does not merge
-     `{w}`. Do not `force_merge`. Do not clear **G3-8** / **G3-3** to land
-     `{w}`. If nothing posts, `{w}` cannot land under **(c)**; that is
-     deadlock, not an unstick.
-  3. **`#3` needs a new push.** After `{w}` is on `main`, **`@PlasticDigits`
-     comments on `pulls/3` that `{w}` is on `main`** so S2 can resume. The
-     **first** S2 session still **stops** after leftover `{iid}` + Decision
-     7 comment. S2 then **rebases** `#3` onto that `main` and **pushes**
-     (new product-tip SHA). Rebase is load-bearing: Woodpecker reads the
+     SHA-pinned `Do: merge`. **S2 never merges `{w}`.** CAC #429 does not
+     merge `{w}`. Do not `force_merge`. Do not clear **G3-8** / **G3-3** to
+     land `{w}`. `{w}`’s planted official request is non-blocking only
+     under the same I6 attest (no CAC dismiss).
+
+     If after activate + Allow PRs + agent online + retrigger,
+     `GET .../statuses/{w-tip-sha}` is still `[]` or `pending`: comment
+     **deadlock** on `pulls/3`. That S2 session is **complete** (same wait
+     table as **(a)** / **(b)**: do not wait for `{w}` on `main`; do not
+     merge `#3`). Diagnose activation / webhook / runner / `when` /
+     filename is how `@PlasticDigits` writes that comment — not an open
+     S2 wait, not leftover `{iid}`, not a ticket that clears **G3-8** /
+     **G3-3**. If Woodpecker ACL/server is outside this repo, record a
+     **named** infra DEPS (not leftover `{iid}`, not a ticket that clears
+     **G3-8** / **G3-3**). Land stays blocked until statuses success.
+  3. **`#3` needs a new push.** Resume only from wait-table item 2:
+     `@PlasticDigits` comments on `pulls/3` that `{w}` is on `main`
+     (**(c)** only). Do not resume after **(a)** / **(b)** or deadlock.
+     S2 then **rebases** `#3` onto that `main` and **pushes** (new
+     product-tip SHA). Rebase is load-bearing: Woodpecker reads the
      **tree** of the new SHA, not the diff vs `main`. An empty-commit of
      `022f4f5` (no yaml in tree) will not post. Do not merge `022f4f5`. The
      `#3` diff vs `main` still must **not** add `.woodpecker.yaml`. If
@@ -273,8 +338,9 @@ Repo admin dated GET JSON of **this** repo’s `main` rule (same GET as
   4. `GET /api/v1/repos/code/gitlab-cursor-webhook/statuses/{new-product-tip-sha}`
      shows `ci/woodpecker/pr/woodpecker` in a **success** state.
   5. **`@PlasticDigits`** SHA-pinned `Do: merge` of `#3` after Integration
-     items 5, 6, and 7. Item 7 **(c)** **is** steps 1–4 (GET success).
-     Step 5 **is** the merge (**G3-4**). S2 never merges `#3`.
+     items 5, 6, and 7. Item 7 **(c)** **is** `{w}` merged under statuses
+     GET success → S2 rebase → statuses GET success (steps 1–4).
+     Step 5 **is** the merge (**G3-4**). S2 never merges `#3` or `{w}`.
 
 File-delete + docs on the tip does not satisfy **(c)**. There is no “when
 one exists” hedge.
@@ -283,14 +349,14 @@ one exists” hedge.
 
 | ID | Rule |
 | --- | --- |
-| **G3-4** | SHA-pinned `Do: merge` with `head_commit_id`. Never document or use `force_merge`. **Land of `#3`:** actor `@PlasticDigits` after ADR Integration items 5, 6, and 7 (item 7 **is** Decision 7 **(c)** steps 1–4; step 5 **is** this merge); **S2 never merges `#3`**. **Standing after land:** actor `@PlasticDigits`; no leftover `{iid}` attest. CAC [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429) does not merge `#3` or plant-check `{n}`. |
+| **G3-4** | SHA-pinned `Do: merge` with `head_commit_id`. Never document or use `force_merge`. **Land of `#3`:** actor `@PlasticDigits` after ADR Integration items 5, 6, and 7 (item 7 **is** Decision 7 **(c)**: `{w}` statuses success → rebase → statuses GET; step 5 **is** this merge); **S2 never merges `#3`**. **Predecessor `{w}`:** actor `@PlasticDigits`; **S2 never merges `{w}`**. **Standing after land:** actor `@PlasticDigits`; no leftover `{iid}` attest. CAC [#429](https://git.cl8y.com/PlasticDigits/cl8y-agent-control/issues/429) does not merge `#3`, `{w}`, or plant-check `{n}`. |
 
 #### Tree contracts
 
 | ID | Rule |
 | --- | --- |
 | **G3-1** | `test -f` fails on `CODEOWNERS`, `docs/CODEOWNERS`, `.gitea/CODEOWNERS`, and `.forgejo/CODEOWNERS`. |
-| **G3-6** | This Coolify app **may** rebuild if the existing host is git-follow on `main` (not verified in-tree). [`docker-compose.yml`](../docker-compose.yml) and [`docker-deploy.md`](docker-deploy.md) only record Dockerfile deploy plus `/var/lib/gch`. They do **not** record git-follow, auto-deploy, rebuild-on-`main`, or Coolify builds on `pull_request` / non-`main`. This ticket does not add PR deploys, rotate tokens/UUIDs, or edit `Dockerfile` / `docker-compose.yml` / entrypoint. A rebuild is not leftover-complete and is not a #297 grant. **Happy-path plant-check `{n}`:** ADR 0001 Tests item 4 — trigger planting by opening **ready** or opening draft/WIP then stripping the prefix / marking ready; pass GET is `draft == false` with no WIP prefix **immediately after that ready transition**; empty draft GET is not a pass; present on draft still fails; comment `do-not-merge` then **close without merge in the same session**; do not leave `{n}` open ready; merged `{n}` still fails leftover-complete. Recovery if `{n}` merges: same item. Coolify secrets never attach to `pull_request` events. |
+| **G3-6** | This Coolify app **may** rebuild if the existing host is git-follow on `main` (not verified in-tree). [`docker-compose.yml`](../docker-compose.yml) and [`docker-deploy.md`](docker-deploy.md) only record Dockerfile deploy plus `/var/lib/gch`. They do **not** record git-follow, auto-deploy, rebuild-on-`main`, or Coolify builds on `pull_request` / non-`main`. This ticket does not add PR deploys, rotate tokens/UUIDs, or edit `Dockerfile` / `docker-compose.yml` / entrypoint. A rebuild is not leftover-complete and is not a #297 grant. **Happy-path plant-check `{n}`:** ADR 0001 Tests item 4 — **mandatory sandwich**: open **WIP/draft** → strip WIP / mark ready → **GET immediately** (pass GET `draft == false`, no WIP prefix) → **re-apply WIP immediately** → close unmerged in the same session. Do **not** open ready-first. Empty draft GET is not a pass; present on draft still fails. Record the **ready** GET pair, not the re-WIP GET. Residual race ready → re-WIP is still open to a poller; `do-not-merge` is a comment, not a host-block; CAC #429 prose is not a mutex. If `{n}` merges, leftover-complete **fails**; revert via PR. Coolify secrets never attach to `pull_request` events. |
 | **G3-7** | This tree does not expand CAC merge/deploy/spend/custody policy. |
 
 Forgejo loads the first existing file among `CODEOWNERS`, `docs/CODEOWNERS`,
@@ -302,26 +368,37 @@ file; Forgejo still parses it.
 
 ##### Land of #3 (not standing)
 
-Leftover `{iid}` with two `@login`s, admin **G3-9** / **G3-10** / **G3-2**
-comment on leftover `{iid}` and `pulls/3`, then Decision 7 classify
-**(a)** / **(b)** / **(c)**. Merge **only** under **(c)** (steps 1–4 through
-GET success, then **G3-4**). **(a)** / **(b)**: stop, record the named DEPS,
-do not `Do: merge`. Merger is **`@PlasticDigits`**. S2 never merges `#3`.
-Land uses this diagram only.
+Leftover `{iid}` with two `@login`s, then I6 protection GET, then Decision 7
+classify **(a)** / **(b)** / **(c)**. Two GETs: **protection** classifies
+and fail-closes I6; **statuses** unsticks **(c)**. Merge **only** under
+**(c)** (`{w}` merged under statuses success → S2 rebase → statuses GET
+success → **G3-4**). **(a)** / **(b)**: wait-table item 1, this S2 session
+complete, do not `Do: merge`. Merger is **`@PlasticDigits`**. S2 never
+merges `#3` or `{w}`. Land uses this diagram only. Same procedure as
+Decision 7, Tests item 9, and land criterion 7.
 
 ```mermaid
-flowchart LR
+flowchart TD
   TIP[PR 3 S0+S1+S2] --> I5[leftover iid Integration 5]
-  I5 --> I6[admin G3-9 G3-10 G3-2 comment]
-  I6 --> ABC{Classify a b c}
-  ABC -->|a: named G3-8 DEPS| STOPA[stop do not merge]
-  ABC -->|b: named G3-3 DEPS| STOPB[stop do not merge]
-  ABC -->|c: steps 1-4 GET success| PD[PlasticDigits SHA-pinned Do: merge]
+  I5 --> I6{I6 protection GET}
+  I6 -->|fail G3-9 or G3-10 true or enable_push != false or missing JSON| STOPI6[stop named DEPS]
+  I6 -->|attest G3-9=0 G3-10=false enable_push=false| ABC{Classify a b c}
+  ABC -->|a named G3-8 DEPS| STOPA[S2 session complete do not wait for w]
+  ABC -->|b named G3-3 DEPS| STOPB[S2 session complete do not wait for w]
+  ABC -->|c| W[w merged under statuses GET success]
+  W --> RB[S2 rebase new product tip]
+  RB --> ST[statuses GET success]
+  ST --> PD[G3-4 PlasticDigits SHA-pinned Do merge]
   PD --> MAIN[protected main]
 ```
 
-Case **(c)** for `#3` is steps 1–4 above (item 7), then step 5. This `#3`
-diff must not add `.woodpecker.yaml`.
+I6 is a **decision**: fail-close on **G3-9 ≠ 0**, **G3-10** `true`,
+`enable_push != false` (**G3-2**), or missing JSON → stop, named DEPS.
+Same GET can be **(c)** and **G3-10**=true; the fail edge is taken, not
+merge. **(a)** / **(b)** stay distinct stop nodes (wait-table item 1).
+**(c)** is `{w}` merged under statuses success → S2 rebase → **statuses**
+GET success → **G3-4**. Protection GET classifies; statuses GET unsticks.
+This `#3` diff must not add `.woodpecker.yaml`.
 
 ##### Standing merge after land (not the #3 checklist)
 
